@@ -1,0 +1,29 @@
+{
+    "name": "publishpress/translations",
+    "description": "AI-powered translation automation for PublishPress plugins using Potomatic",
+    "type": "library",
+    "license": "GPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "PublishPress",
+            "email": "help@publishpress.com"
+        }
+    ],
+    "require": {
+        "php": ">=7.2.5",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "PublishPress\\Translations\\": "src/"
+        }
+    },
+    "bin": [
+        "bin/publishpress-translate"
+    ],
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

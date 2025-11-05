@@ -1,0 +1,116 @@
+<?php
+/**
+ * PublishPress Translation CLI
+ * 
+ * Translates WordPress plugins using AI-powered Potomatic
+ * 
+ * @package PublishPress\Translations
+ */
+$possibleAutoloadPaths = [
+    __DIR__ . '/../../../../autoload.php',
+    __DIR__ . '/../../../autoload.php',
+    __DIR__ . '/../vendor/autoload.php',
+];
+
+$cwd = getcwd();
+if ($cwd) {
+    $possibleAutoloadPaths[] = $cwd . '/vendor/autoload.php';
+}
+
+$autoloaderFound = false;
+foreach ($possibleAutoloadPaths as $autoloadPath) {
+    $autoloadPath = str_replace('\\', '/', $autoloadPath);
+    
+    if (file_exists($autoloadPath)) {
+        require_once $autoloadPath;
+        $autoloaderFound = true;
+        break;
+    }
+}
+
+if (!$autoloaderFound) {
+    fwrite(STDERR, "Error: Composer autoloader not found.\n");
+    fwrite(STDERR, "Searched in:\n");
+    foreach ($possibleAutoloadPaths as $path) {
+        $exists = file_exists($path) ? '[EXISTS]' : '[NOT FOUND]';
+        fwrite(STDERR, "  $exists $path\n");
+    }
+    fwrite(STDERR, "\nPlease run 'composer install' first.\n");
+    exit(1);
+}
+
+use PublishPress\Translations\Translator;
+
+$options = getopt('', [
+    'dry-run',
+    'force',
+    'languages:',
+    'help',
+]);
+
+if (isset($options['help'])) {
+    echo <<<HELP
+
+PublishPress Translation Tool
+==============================
+
+Automatically translates WordPress plugins using AI.
+
+Usage:
+  publishpress-translate [options]
+
+Options:
+  --dry-run              Preview translations without making API calls
+  --force                Force re-translate all strings (ignore existing)
+  --languages=LANGS      Comma-separated language codes (default: all configured)
+  --help                 Show this help message
+
+Examples:
+  publishpress-translate
+  publishpress-translate --dry-run
+  publishpress-translate --languages=de_DE,fr_FR,es_ES
+  publishpress-translate --force
+
+Environment Variables:
+  OPENAI_API_KEY        Required for actual translations (not needed for --dry-run)
+
+HELP;
+    exit(0);
+}
+
+$pluginRoot = getcwd();
+
+if (!file_exists($pluginRoot . '/composer.json')) {
+    fwrite(STDERR, "Error: Not in a plugin directory. No composer.json found.\n");
+    fwrite(STDERR, "Please run this command from your plugin's root directory.\n");
+    exit(1);
+}
+
+try {
+    $translator = new Translator($pluginRoot);
+    
+    if (isset($options['dry-run'])) {
+        $translator->setDryRun(true);
+    }
+    
+    if (isset($options['force'])) {
+        $translator->setForceTranslate(true);
+    }
+    
+    if (isset($options['languages'])) {
+        $languages = array_map('trim', explode(',', $options['languages']));
+        $translator->setTargetLanguages($languages);
+    }
+    
+    $result = $translator->translate();
+    
+    if ($result) {
+        exit(0);
+    } else {
+        exit(1);
+    }
+    
+} catch (Exception $e) {
+    fwrite(STDERR, "Error: " . $e->getMessage() . "\n");
+    exit(1);
+}

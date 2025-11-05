@@ -1,0 +1,11 @@
+.github/
+*.gif
+tests/
+tools/
+*vitest*
+.eslint*
+.prettier*
+*.yml
+*.po
+*.pot
+.env*

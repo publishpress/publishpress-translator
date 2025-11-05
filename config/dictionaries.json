@@ -1,0 +1,18 @@
+{
+    "brand_terms": {
+        "PublishPress": "PublishPress",
+        "TaxoPress": "TaxoPress",
+        "WordPress": "WordPress",
+        "WooCommerce": "WooCommerce"
+    },
+    "technical_terms": {
+        "taxonomy": "taxonomy",
+        "taxonomies": "taxonomies",
+        "post type": "post type",
+        "custom field": "custom field",
+        "shortcode": "shortcode",
+        "widget": "widget",
+        "admin": "admin",
+        "dashboard": "dashboard"
+    }
+}
