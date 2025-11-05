@@ -11,6 +11,13 @@ AI-powered translation automation for PublishPress plugins using Potomatic and O
 - Supports 10+ languages by default
 - Dry-run mode for cost estimation
 
+## Requirements
+
+- PHP 7.2.5 or higher
+- Node.js 18+ and npm (for Potomatic CLI tool)
+- OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+- Plugin must have a `languages/` directory with `.pot` files
+
 ## Installation
 
 ### For Production
@@ -118,13 +125,6 @@ The tool translates into these languages by default:
 3. Creates/updates `.po` files for each target language
 4. Merges with existing translations (preserves manual edits)
 5. Outputs translation files ready for WordPress to use
-
-## Requirements
-
-- PHP 7.2.5 or higher
-- Composer
-- OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
-- Plugin must have a `languages/` directory with `.pot` files
 
 ## One-Time Setup
 

@@ -24,6 +24,15 @@
     "bin": [
         "bin/publishpress-translate"
     ],
+    "scripts": {
+        "post-install-cmd": [
+            "@setup-potomatic"
+        ],
+        "post-update-cmd": [
+            "@setup-potomatic"
+        ],
+        "setup-potomatic": "bash scripts/setup-potomatic.sh"
+    },
     "minimum-stability": "stable",
     "prefer-stable": true
 }
