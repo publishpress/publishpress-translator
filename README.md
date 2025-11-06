@@ -20,29 +20,62 @@ AI-powered translation automation for PublishPress plugins using Potomatic and O
 
 ## Installation
 
-### For Production
+**Note:** This setup works the same whether you're working from the plugin root or inside dev-workspace.
 
-Add to your plugin's `composer.json` (root or `lib/composer.json` for dev-workspace):
+### Step 1: Add to `lib/composer.json`
+
+⚠️ **Current setup (until published on Packagist):**
 
 ```json
 {
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/publishpress/publishpress-translator.git"
+        }
+    ],
     "require": {
-        "publishpress/translations": "^1.0"
-    },
-    "scripts": {
-        "translate": "publishpress-translate",
-        "translate:dry-run": "publishpress-translate --dry-run"
+        "publishpress/translations": "dev-main"
     }
 }
 ```
 
-Then run:
+### Step 2: Add to root `composer.json`
 
-```bash
-composer require publishpress/translations
+```json
+{
+    "scripts": {
+        "translate": "lib/vendor/bin/publishpress-translate",
+        "translate:dry-run": "lib/vendor/bin/publishpress-translate --dry-run"
+    }
+}
 ```
 
-**Smart Detection:** The library automatically detects whether it's running in a dev-workspace (Docker) or plugin root environment and adapts accordingly. You can install it in either location and it will work!
+### Step 3: Install
+
+```bash
+composer update
+```
+
+### Step 4: Setup Potomatic
+
+⚠️ **Required for now (until published on Packagist):**
+
+```bash
+php lib/vendor/publishpress/translations/bin/setup-potomatic.php
+```
+
+---
+
+**Once on Packagist:** Change Step 1 to:
+```json
+{
+    "require": {
+        "publishpress/translations": "^1.0"
+    }
+}
+```
+And Step 4 (manual Potomatic setup) won't be needed anymore!
 
 ## Usage
 
