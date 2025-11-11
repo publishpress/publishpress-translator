@@ -161,6 +161,30 @@ class Translator
     }
     
     /**
+     * Get plugin slug from composer.json
+     * Falls back to directory name if not found
+     * 
+     * @return string
+     */
+    private function getPluginSlug()
+    {
+        $composerFile = $this->pluginRoot . '/composer.json';
+        if (file_exists($composerFile)) {
+            $composerData = json_decode(file_get_contents($composerFile), true);
+            if (isset($composerData['extra']['plugin-slug'])) {
+                return $composerData['extra']['plugin-slug'];
+            }
+            if (isset($composerData['name'])) {
+                $parts = explode('/', $composerData['name']);
+                if (count($parts) === 2) {
+                    return $parts[0] . '-' . $parts[1];
+                }
+            }
+        }
+        return basename($this->pluginRoot);
+    }
+    
+    /**
      * Find all POT files
      * 
      * @return array

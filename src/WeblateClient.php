@@ -137,10 +137,11 @@ class WeblateClient
      * @param string $componentSlug
      * @param string $componentName
      * @param string $potFilePath
+     * @param string|null $pluginSlug GitHub repo slug (defaults to projectSlug)
      * @return array
      * @throws Exception
      */
-    public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath)
+    public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath, $pluginSlug = null)
     {
         try {
             // Read POT file content
@@ -151,7 +152,8 @@ class WeblateClient
             
             // Use GitHub repo for .pot file reference, but disable auto-updates
             // We'll upload .po files manually via API to keep them current
-            $repoUrl = "https://github.com/publishpress/{$projectSlug}.git";
+            $repoSlug = $pluginSlug ?: $projectSlug;
+            $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
                 'json' => [
