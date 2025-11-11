@@ -149,8 +149,8 @@ class WeblateClient
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
             
-            // Weblate requires a repo URL, but we'll push=0 to prevent auto-sync
-            // We'll upload files manually via API instead
+            // Use GitHub repo for .pot file reference, but disable auto-updates
+            // We'll upload .po files manually via API to keep them current
             $repoUrl = "https://github.com/publishpress/{$projectSlug}.git";
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
@@ -158,12 +158,15 @@ class WeblateClient
                     'name' => $componentName,
                     'slug' => $componentSlug,
                     'repo' => $repoUrl,
-                    'push' => '',  // Empty push URL = no auto-push
+                    'branch' => 'development',
+                    'push' => '',
                     'vcs' => 'git',
                     'file_format' => 'po',
                     'filemask' => 'languages/{$componentSlug}-*.po',
                     'template' => 'languages/{$componentSlug}.pot',
                     'new_lang' => 'add',
+                    'manage_units' => false,
+                    'update_on_commit' => false,
                 ]
             ]);
             
