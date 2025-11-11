@@ -149,18 +149,18 @@ class WeblateClient
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
             
-            // Use a dummy GitHub repo URL (Weblate requires it even though we'll upload files directly)
-            $repoUrl = "https://github.com/publishpress/{$projectSlug}.git";
+            // Use weblate:// pseudo-VCS for file-based uploads (no authentication needed)
+            $repoUrl = "weblate://{$projectSlug}/{$componentSlug}";
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
                 'json' => [
                     'name' => $componentName,
                     'slug' => $componentSlug,
                     'repo' => $repoUrl,
-                    'vcs' => 'git',
+                    'vcs' => 'local',
                     'file_format' => 'po',
-                    'filemask' => "*.po",
-                    'new_base' => "languages/{$componentSlug}.pot",
+                    'filemask' => "{$componentSlug}-*.po",
+                    'new_base' => "{$componentSlug}.pot",
                     'new_lang' => 'add',
                 ]
             ]);
