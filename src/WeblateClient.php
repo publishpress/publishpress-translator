@@ -174,8 +174,14 @@ class WeblateClient
             
             $result = json_decode($response->getBody()->getContents(), true);
             
-            // After creating component, upload the POT file
-            $this->uploadPot($projectSlug, $componentSlug, $potFilePath);
+            // Trigger repo update to pull files from GitHub
+            try {
+                $this->client->post("components/{$projectSlug}/{$componentSlug}/repository/");
+                // Wait a moment for the update to complete
+                sleep(2);
+            } catch (GuzzleException $updateError) {
+                // Non-fatal, continue anyway
+            }
             
             return $result;
         } catch (GuzzleException $e) {
