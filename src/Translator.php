@@ -356,7 +356,7 @@ class Translator
                     $componentSlug,
                     $textDomain,
                     $potFile,
-                    $pluginSlug
+                    $this->getGitRepoSlug()
                 );
                 echo "  ✓ Component created successfully\n";
             } catch (Exception $e) {
@@ -397,6 +397,31 @@ class Translator
         }
 
         echo "  View at: https://hosted.weblate.org/projects/{$projectSlug}/{$componentSlug}/\n\n";
+    }
+
+    /**
+     * Get GitHub repo slug from plugin root
+     * 
+     * @return string|null
+     */
+    private function getGitRepoSlug()
+    {
+        // Check if .git directory exists
+        $gitDir = $this->pluginRoot . '/.git';
+        if (!is_dir($gitDir)) {
+            return null;
+        }
+        
+        // Try to extract from git config
+        $configFile = $gitDir . '/config';
+        if (file_exists($configFile)) {
+            $content = file_get_contents($configFile);
+            if (preg_match('/url\s*=\s*.*publishpress\/(.+?)(\.git)?$/m', $content, $matches)) {
+                return $matches[1];
+            }
+        }
+        
+        return null;
     }
     
     /**

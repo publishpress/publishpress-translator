@@ -137,11 +137,11 @@ class WeblateClient
      * @param string $componentSlug
      * @param string $componentName
      * @param string $potFilePath
-     * @param string|null $pluginSlug GitHub repo slug (defaults to projectSlug)
+     * @param string|null $gitRepoSlug GitHub repo slug
      * @return array
      * @throws Exception
      */
-    public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath, $pluginSlug = null)
+    public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath, $gitRepoSlug = null)
     {
         try {
             // Read POT file content
@@ -150,10 +150,17 @@ class WeblateClient
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
             
-            // Use GitHub repo for .pot file reference, but disable auto-updates
-            // We'll upload .po files manually via API to keep them current
-            $repoSlug = $pluginSlug ?: $projectSlug;
-            $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+            $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
+            // Use the git repo slug if provided, otherwise try to guess from componentSlug
+            $repoSlug = $gitRepoSlug ?: $componentSlug;
+            
+            if ($repoType === 'ssh') {
+                $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+            } else {
+                $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+                $pushUrl = '';
+            }
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
                 'json' => [
@@ -161,7 +168,7 @@ class WeblateClient
                     'slug' => $componentSlug,
                     'repo' => $repoUrl,
                     'branch' => 'development',
-                    'push' => '',
+                    'push' => $pushUrl,
                     'vcs' => 'git',
                     'file_format' => 'po',
                     'filemask' => "languages/{$componentSlug}-*.po",
@@ -173,16 +180,6 @@ class WeblateClient
             ]);
             
             $result = json_decode($response->getBody()->getContents(), true);
-            
-            // Trigger repo update to pull files from GitHub
-            // try {
-            //     $this->client->post("components/{$projectSlug}/{$componentSlug}/repository/");
-            //     // Wait a moment for the update to complete
-            //     sleep(2);
-            // } catch (GuzzleException $updateError) {
-            //     // Non-fatal, continue anyway
-            // }
-            
             return $result;
         } catch (GuzzleException $e) {
             $errorBody = '';
