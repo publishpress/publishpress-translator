@@ -163,7 +163,7 @@ class WeblateClient
                     'branch' => 'development',
                     'push' => '',
                     'vcs' => 'git',
-                    'file_format' => 'po',
+                    'file_format' => 'po-mono',
                     'filemask' => 'languages/{$componentSlug}-*.po',
                     'template' => 'languages/{$componentSlug}.pot',
                     'new_lang' => 'add',
