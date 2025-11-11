@@ -6,6 +6,18 @@
  * 
  * @package PublishPress\Translations
  */
+
+$isComposerScript = getenv('COMPOSER_PROCESS_TIMEOUT') === false && 
+                    (getenv('COMPOSER') !== false || 
+                     defined('COMPOSER_SCRIPT_RUNNER') || 
+                     strpos($_SERVER['_'] ?? '', 'composer') !== false);
+
+if ($isComposerScript) {
+    set_time_limit(3600);
+
+    putenv('COMPOSER_PROCESS_TIMEOUT=3600');
+}
+
 $possibleAutoloadPaths = [
     __DIR__ . '/../../../../autoload.php',
     __DIR__ . '/../../../autoload.php',
