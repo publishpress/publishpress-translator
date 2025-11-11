@@ -320,7 +320,7 @@ class Translator
         return $cmd;
     }
 
-        /**
+    /**
      * Upload translations to Weblate (internal method)
      * 
      * @param string $potFile
@@ -346,7 +346,7 @@ class Translator
             $this->weblateClient->createProject($projectSlug, $pluginSlug);
         }
         
-        // Step 2: Check if component exists
+        // Step 2: Ensure component exists, auto-create if needed
         echo "  • Checking component '{$componentSlug}'...\n";
         if (!$this->weblateClient->componentExists($projectSlug, $componentSlug)) {
             echo "  • Creating component '{$componentSlug}'...\n";
@@ -364,39 +364,29 @@ class Translator
             }
         }
         
-        // Step 3: Update POT file
-        echo "  • Updating POT file...\n";
-        $this->weblateClient->uploadPot($projectSlug, $componentSlug, $potFile);
+        // Step 3: Upload all PO files from local languages directory
+        echo "  • Uploading translation files...\n";
+        $poFiles = glob($this->languagesDir . "/{$componentSlug}-*.po");
         
-        // Step 3: Upload PO files
-        $poFiles = [];
-        $files = scandir($this->languagesDir);
-        foreach ($files as $file) {
-            if (substr($file, 0, strlen($textDomain . '-')) === $textDomain . '-' && substr($file, -3) === '.po') {
-                $poFiles[] = $this->languagesDir . '/' . $file;
-            }
-        }
-        
-        if (empty($poFiles)) {
-            echo "  ⚠️  No PO files found to upload\n";
-            return;
-        }
-        
-        echo "  • Uploading " . count($poFiles) . " translation files...\n";
         foreach ($poFiles as $poFile) {
-            $fileName = basename($poFile);
-            // Extract language code from filename (e.g., "plugin-name-de_DE.po" -> "de_DE")
-            $language = str_replace($textDomain . '-', '', str_replace('.po', '', $fileName));
+            // Extract language code from filename (e.g., publishpress-checklists-fr_FR.po -> fr_FR)
+            preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
+            if (!isset($matches[1])) {
+                continue;
+            }
+            
+            $languageCode = $matches[1];
             
             try {
-                $this->weblateClient->uploadPo($projectSlug, $componentSlug, $language, $poFile);
-                echo "    ✓ {$language}\n";
+                $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
+                echo "    ✓ Uploaded {$languageCode}\n";
             } catch (Exception $e) {
-                echo "    ✗ {$language}: " . $e->getMessage() . "\n";
+                echo "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n";
             }
         }
         
-        echo "\n✅ Weblate upload complete!\n";
+        echo "  ✓ All translations uploaded\n";
+
         echo "  View at: https://hosted.weblate.org/projects/{$projectSlug}/{$componentSlug}/\n\n";
     }
     
@@ -746,10 +736,9 @@ class Translator
                 $textDomain = str_replace('.pot', '', $potFileName);
                 
                 try {
-                    $this->uploadToWeblate($potFile, $textDomain);
+                    $this->uploadToWeblateInternal($potFile, $textDomain);
                 } catch (Exception $e) {
                     fwrite(STDERR, "⚠️  Warning: Weblate upload failed for {$textDomain}: " . $e->getMessage() . "\n\n");
-                    // Don't fail the whole process if Weblate upload fails
                 }
             }
         }
