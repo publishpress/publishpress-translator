@@ -149,19 +149,19 @@ class WeblateClient
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
             
-            // Use weblate:// pseudo-VCS for file-based uploads (no authentication needed)
             $repoUrl = "weblate://{$projectSlug}/{$componentSlug}";
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
                 'json' => [
                     'name' => $componentName,
                     'slug' => $componentSlug,
-                    'repo' => $repoUrl,
-                    'vcs' => 'local',
                     'file_format' => 'po',
                     'filemask' => "{$componentSlug}-*.po",
-                    'new_base' => "{$componentSlug}.pot",
+                    'template' => "{$componentSlug}.pot",
                     'new_lang' => 'add',
+                    'source_language' => [
+                        'code' => 'en',
+                    ],
                 ]
             ]);
             
