@@ -149,19 +149,28 @@ class WeblateClient
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
             
+            // Use a dummy GitHub repo URL (Weblate requires it even though we'll upload files directly)
+            $repoUrl = "https://github.com/publishpress/{$projectSlug}.git";
+            
             $response = $this->client->post("projects/{$projectSlug}/components/", [
                 'json' => [
                     'name' => $componentName,
                     'slug' => $componentSlug,
+                    'repo' => $repoUrl,
+                    'vcs' => 'git',
                     'file_format' => 'po',
-                    'filemask' => "languages/{$componentSlug}-*.po",
-                    'template' => "languages/{$componentSlug}.pot",
-                    'new_base' => $potContent,
-                    'vcs' => 'local',
+                    'filemask' => "*.po",
+                    'new_base' => "languages/{$componentSlug}.pot",
+                    'new_lang' => 'add',
                 ]
             ]);
             
-            return json_decode($response->getBody()->getContents(), true);
+            $result = json_decode($response->getBody()->getContents(), true);
+            
+            // After creating component, upload the POT file
+            $this->uploadPot($projectSlug, $componentSlug, $potFilePath);
+            
+            return $result;
         } catch (GuzzleException $e) {
             $errorBody = '';
             if (method_exists($e, 'getResponse') && $e->getResponse()) {

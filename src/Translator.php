@@ -297,13 +297,13 @@ class Translator
     }
 
         /**
-     * Upload translations to Weblate
+     * Upload translations to Weblate (internal method)
      * 
      * @param string $potFile
      * @param string $textDomain
      * @throws Exception
      */
-    private function uploadToWeblate($potFile, $textDomain)
+    private function uploadToWeblateInternal($potFile, $textDomain)
     {
         if (!$this->weblateClient) {
             throw new Exception('Weblate client not initialized');
@@ -363,6 +363,57 @@ class Translator
         
         echo "\n✅ Weblate upload complete!\n";
         echo "  View at: https://hosted.weblate.org/projects/{$projectSlug}/{$componentSlug}/\n\n";
+    }
+    
+    /**
+     * Upload existing translations to Weblate (public method)
+     * 
+     * @return bool
+     */
+    public function uploadToWeblate()
+    {
+        if (!$this->weblateClient) {
+            fwrite(STDERR, "Error: Weblate not configured.\n");
+            fwrite(STDERR, "Please set WEBLATE_API_TOKEN environment variable.\n\n");
+            return false;
+        }
+        
+        $pluginName = $this->getPluginName();
+        
+        echo "\n📤 PublishPress Translation Upload\n";
+        echo str_repeat('=', 50) . "\n\n";
+        echo "Plugin: {$pluginName}\n";
+        echo "Path: {$this->pluginRoot}\n\n";
+        
+        $potFiles = $this->findPotFiles();
+        
+        if (empty($potFiles)) {
+            fwrite(STDERR, "Error: No .pot files found in {$this->languagesDir}\n");
+            return false;
+        }
+        
+        echo "📤 Uploading translations to Weblate...\n";
+        echo "POT files found: " . count($potFiles) . "\n\n";
+        
+        $success = true;
+        foreach ($potFiles as $potFile) {
+            $potFileName = basename($potFile);
+            $textDomain = str_replace('.pot', '', $potFileName);
+            
+            echo "[" . basename($potFile) . "]\n";
+            
+            try {
+                $this->uploadToWeblateInternal($potFile, $textDomain);
+            } catch (Exception $e) {
+                fwrite(STDERR, "⚠️  Warning: Weblate upload failed for {$textDomain}: " . $e->getMessage() . "\n\n");
+                $success = false;
+            }
+        }
+        
+        echo str_repeat('=', 50) . "\n";
+        echo "✨ Upload " . ($success ? 'complete' : 'finished with errors') . " for {$pluginName}!\n\n";
+        
+        return $success;
     }
     
     /**

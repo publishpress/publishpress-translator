@@ -46,6 +46,7 @@ $options = getopt('', [
     'force',
     'languages:',
     'download',
+    'upload',
     'help',
 ]);
 
@@ -65,6 +66,7 @@ Options:
   --force                Force re-translate all strings (ignore existing)
   --languages=LANGS      Comma-separated language codes (default: all configured)
   --download             Download translations from Weblate (instead of generating)
+  --upload               Upload existing translations to Weblate (no AI translation)
   --help                 Show this help message
 
 Examples:
@@ -73,6 +75,7 @@ Examples:
   publishpress-translate --languages=de_DE,fr_FR   # Translate specific languages
   publishpress-translate --force                   # Force re-translate all
   publishpress-translate --download                # Download from Weblate
+  publishpress-translate --upload                  # Upload existing translations to Weblate
 
 Environment Variables:
   OPENAI_API_KEY        Required for AI translations (not needed for --dry-run or --download)
@@ -112,9 +115,11 @@ try {
         $translator->setTargetLanguages($languages);
     }
     
-    // Check if download mode
+    // Check mode
     if (isset($options['download'])) {
         $result = $translator->downloadFromWeblate();
+    } elseif (isset($options['upload'])) {
+        $result = $translator->uploadToWeblate();
     } else {
         $result = $translator->translate();
     }
