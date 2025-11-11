@@ -165,7 +165,8 @@ class WeblateClient
                     'vcs' => 'git',
                     'file_format' => 'po',
                     'filemask' => 'languages/{$componentSlug}-*.po',
-                    'new_lang' => 'none',
+                    'new_base' => 'languages/{$componentSlug}-en_GB.po',
+                    'new_lang' => 'add',
                     'manage_units' => false,
                     'update_on_commit' => false,
                 ]
