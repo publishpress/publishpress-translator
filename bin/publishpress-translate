@@ -45,6 +45,7 @@ $options = getopt('', [
     'dry-run',
     'force',
     'languages:',
+    'download',
     'help',
 ]);
 
@@ -54,7 +55,7 @@ if (isset($options['help'])) {
 PublishPress Translation Tool
 ==============================
 
-Automatically translates WordPress plugins using AI.
+Automatically translates WordPress plugins using AI and manages translations via Weblate.
 
 Usage:
   publishpress-translate [options]
@@ -63,16 +64,25 @@ Options:
   --dry-run              Preview translations without making API calls
   --force                Force re-translate all strings (ignore existing)
   --languages=LANGS      Comma-separated language codes (default: all configured)
+  --download             Download translations from Weblate (instead of generating)
   --help                 Show this help message
 
 Examples:
-  publishpress-translate
-  publishpress-translate --dry-run
-  publishpress-translate --languages=de_DE,fr_FR,es_ES
-  publishpress-translate --force
+  publishpress-translate                           # Generate and upload to Weblate
+  publishpress-translate --dry-run                 # Preview without API calls
+  publishpress-translate --languages=de_DE,fr_FR   # Translate specific languages
+  publishpress-translate --force                   # Force re-translate all
+  publishpress-translate --download                # Download from Weblate
 
 Environment Variables:
-  OPENAI_API_KEY        Required for actual translations (not needed for --dry-run)
+  OPENAI_API_KEY        Required for AI translations (not needed for --dry-run or --download)
+  WEBLATE_API_TOKEN     Required for Weblate integration (upload/download)
+
+Workflow:
+  1. Generate translations:  publishpress-translate
+  2. Review in Weblate:      https://hosted.weblate.org/
+  3. Download updates:       publishpress-translate --download
+  4. Build plugin with translations in /languages folder
 
 HELP;
     exit(0);
@@ -102,7 +112,12 @@ try {
         $translator->setTargetLanguages($languages);
     }
     
-    $result = $translator->translate();
+    // Check if download mode
+    if (isset($options['download'])) {
+        $result = $translator->downloadFromWeblate();
+    } else {
+        $result = $translator->translate();
+    }
     
     if ($result) {
         exit(0);

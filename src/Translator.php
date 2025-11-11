@@ -31,8 +31,15 @@ class Translator
      * @var array
      */
     private $targetLanguages = [
-        'de_DE', 'es_ES', 'fr_FR', 'he_IL', 'it_IT',
-        'ja', 'ko_KR', 'ru_RU', 'zh_CN', 'zh_TW'
+        'de_DE',
+        'pt_BR', 
+        'id_ID',
+        'fil',
+        'ru_RU',
+        'yo',
+        'fi',
+        'ja',
+        'ko_KR'
     ];
     
     /**
@@ -48,6 +55,20 @@ class Translator
      * @var bool
      */
     private $forceTranslate = false;
+
+    /**
+     * Weblate integration enabled
+     * 
+     * @var bool
+     */
+    private $weblateEnabled = false;
+    
+    /**
+     * Weblate client
+     * 
+     * @var WeblateClient|null
+     */
+    private $weblateClient = null;
     
     /**
      * Potomatic settings
@@ -75,6 +96,17 @@ class Translator
         
         if (!is_dir($this->languagesDir)) {
             throw new Exception("Languages directory not found: {$this->languagesDir}");
+        }
+        
+        // Check if Weblate is enabled
+        if (getenv('WEBLATE_API_TOKEN')) {
+            try {
+                $this->weblateClient = new WeblateClient();
+                $this->weblateEnabled = true;
+            } catch (Exception $e) {
+                // Weblate not configured, continue without it
+                $this->weblateEnabled = false;
+            }
         }
     }
     
@@ -106,6 +138,16 @@ class Translator
     public function setTargetLanguages(array $languages)
     {
         $this->targetLanguages = $languages;
+    }
+
+        /**
+     * Enable or disable Weblate integration
+     * 
+     * @param bool $enabled
+     */
+    public function setWeblateEnabled($enabled)
+    {
+        $this->weblateEnabled = (bool) $enabled;
     }
     
     /**
@@ -253,6 +295,284 @@ class Translator
         
         return $cmd;
     }
+
+        /**
+     * Upload translations to Weblate
+     * 
+     * @param string $potFile
+     * @param string $textDomain
+     * @throws Exception
+     */
+    private function uploadToWeblate($potFile, $textDomain)
+    {
+        if (!$this->weblateClient) {
+            throw new Exception('Weblate client not initialized');
+        }
+        
+        echo "\n Uploading to Weblate...\n";
+        
+        $pluginName = $this->getPluginName();
+        $projectSlug = $pluginName;
+        $componentSlug = $textDomain;
+        
+        // Step 1: Ensure project exists
+        echo "  • Checking project '{$projectSlug}'...\n";
+        if (!$this->weblateClient->projectExists($projectSlug)) {
+            echo "  • Creating project '{$projectSlug}'...\n";
+            $this->weblateClient->createProject($projectSlug, $pluginName);
+        }
+        
+        // Step 2: Ensure component exists
+        echo "  • Checking component '{$componentSlug}'...\n";
+        if (!$this->weblateClient->componentExists($projectSlug, $componentSlug)) {
+            echo "  • Creating component '{$componentSlug}'...\n";
+            $this->weblateClient->createComponent($projectSlug, $componentSlug, $textDomain, $potFile);
+        } else {
+            // Update POT file if component exists
+            echo "  • Updating POT file...\n";
+            $this->weblateClient->uploadPot($projectSlug, $componentSlug, $potFile);
+        }
+        
+        // Step 3: Upload PO files
+        $poFiles = [];
+        $files = scandir($this->languagesDir);
+        foreach ($files as $file) {
+            if (substr($file, 0, strlen($textDomain . '-')) === $textDomain . '-' && substr($file, -3) === '.po') {
+                $poFiles[] = $this->languagesDir . '/' . $file;
+            }
+        }
+        
+        if (empty($poFiles)) {
+            echo "  ⚠️  No PO files found to upload\n";
+            return;
+        }
+        
+        echo "  • Uploading " . count($poFiles) . " translation files...\n";
+        foreach ($poFiles as $poFile) {
+            $fileName = basename($poFile);
+            // Extract language code from filename (e.g., "plugin-name-de_DE.po" -> "de_DE")
+            $language = str_replace($textDomain . '-', '', str_replace('.po', '', $fileName));
+            
+            try {
+                $this->weblateClient->uploadPo($projectSlug, $componentSlug, $language, $poFile);
+                echo "    ✓ {$language}\n";
+            } catch (Exception $e) {
+                echo "    ✗ {$language}: " . $e->getMessage() . "\n";
+            }
+        }
+        
+        echo "\n✅ Weblate upload complete!\n";
+        echo "  View at: https://hosted.weblate.org/projects/{$projectSlug}/{$componentSlug}/\n\n";
+    }
+    
+    /**
+     * Download translations from Weblate
+     * 
+     * @param bool $silent If true, suppress output messages
+     * @return bool
+     */
+    public function downloadFromWeblate($silent = false)
+    {
+        if (!$this->weblateClient) {
+            if (!$silent) {
+                fwrite(STDERR, "Error: Weblate not configured.\n");
+                fwrite(STDERR, "Please set WEBLATE_API_TOKEN environment variable.\n\n");
+            }
+            return false;
+        }
+        
+        $pluginName = $this->getPluginName();
+        $projectSlug = $pluginName;
+        
+        if (!$silent) {
+            echo "\n⬇️  Downloading Translations from Weblate\n";
+            echo str_repeat('=', 50) . "\n\n";
+            echo "Plugin: {$pluginName}\n";
+            echo "Project: {$projectSlug}\n\n";
+        }
+        
+        // Find all POT files to determine components
+        $potFiles = $this->findPotFiles();
+        
+        if (empty($potFiles)) {
+            if (!$silent) {
+                fwrite(STDERR, "Error: No .pot files found in {$this->languagesDir}\n");
+            }
+            return false;
+        }
+        
+        $success = true;
+        $totalDownloaded = 0;
+        
+        foreach ($potFiles as $potFile) {
+            $potFileName = basename($potFile);
+            $textDomain = str_replace('.pot', '', $potFileName);
+            
+            if (!$silent) {
+                echo "Component: {$textDomain}\n";
+            }
+            
+            // Check if component exists
+            try {
+                if (!$this->weblateClient->componentExists($projectSlug, $textDomain)) {
+                    if (!$silent) {
+                        echo "  ⚠️  Component not found on Weblate, skipping...\n\n";
+                    }
+                    continue;
+                }
+            } catch (Exception $e) {
+                if (!$silent) {
+                    fwrite(STDERR, "  ❌ Error checking component: " . $e->getMessage() . "\n\n");
+                }
+                $success = false;
+                continue;
+            }
+            
+            // Download translations for each target language
+            foreach ($this->targetLanguages as $language) {
+                try {
+                    $poContent = $this->weblateClient->downloadPo($projectSlug, $textDomain, $language);
+                    
+                    if ($poContent) {
+                        $poFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.po';
+                        file_put_contents($poFile, $poContent);
+                        
+                        // Convert PO to MO
+                        $moFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.mo';
+                        $this->convertPoToMo($poFile, $moFile);
+                        
+                        if (!$silent) {
+                            echo "  ✓ {$language}\n";
+                        }
+                        $totalDownloaded++;
+                    } else {
+                        if (!$silent) {
+                            echo "  ⊘ {$language} (not available)\n";
+                        }
+                    }
+                } catch (Exception $e) {
+                    if (!$silent) {
+                        echo "  ✗ {$language}: " . $e->getMessage() . "\n";
+                    }
+                }
+            }
+            
+            if (!$silent) {
+                echo "\n";
+            }
+        }
+        
+        if (!$silent) {
+            echo str_repeat('=', 50) . "\n";
+            echo "✨ Downloaded {$totalDownloaded} translation files!\n\n";
+        }
+        
+        return $success;
+    }
+    
+    /**
+     * Convert PO file to MO file
+     * 
+     * @param string $poFile Path to PO file
+     * @param string $moFile Path to output MO file
+     * @return bool True on success
+     */
+    private function convertPoToMo($poFile, $moFile)
+    {
+        // Simple PO to MO conversion
+        // This is a basic implementation - for production, consider using gettext tools
+        
+        $entries = [];
+        $currentEntry = null;
+        $lines = file($poFile, FILE_IGNORE_NEW_LINES);
+        
+        foreach ($lines as $line) {
+            $line = trim($line);
+            
+            if (empty($line) || $line[0] === '#') {
+                continue;
+            }
+            
+            if (strpos($line, 'msgid') === 0) {
+                if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
+                    $entries[] = $currentEntry;
+                }
+                $currentEntry = ['msgid' => $this->extractString($line), 'msgstr' => ''];
+            } elseif (strpos($line, 'msgstr') === 0 && $currentEntry) {
+                $currentEntry['msgstr'] = $this->extractString($line);
+            }
+        }
+        
+        if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
+            $entries[] = $currentEntry;
+        }
+        
+        // Write MO file (simplified binary format)
+        // For production, use proper gettext library or msgfmt command
+        $mo = $this->buildMoFile($entries);
+        return file_put_contents($moFile, $mo) !== false;
+    }
+    
+    /**
+     * Extract string from PO line
+     * 
+     * @param string $line
+     * @return string
+     */
+    private function extractString($line)
+    {
+        if (preg_match('/"(.*)"/', $line, $matches)) {
+            return stripcslashes($matches[1]);
+        }
+        return '';
+    }
+    
+    /**
+     * Build MO file content
+     * 
+     * @param array $entries
+     * @return string
+     */
+    private function buildMoFile($entries)
+    {
+        // MO file magic number
+        $magic = 0x950412de;
+        $revision = 0;
+        $count = count($entries);
+        
+        $idsOffset = 28;
+        $strsOffset = $idsOffset + 8 * $count;
+        
+        $ids = '';
+        $strs = '';
+        $idsIndex = [];
+        $strsIndex = [];
+        
+        foreach ($entries as $entry) {
+            $idsIndex[] = [strlen($ids), strlen($entry['msgid'])];
+            $ids .= $entry['msgid'] . "\0";
+            
+            $strsIndex[] = [strlen($strs), strlen($entry['msgstr'])];
+            $strs .= $entry['msgstr'] . "\0";
+        }
+        
+        $keysOffset = $strsOffset + 8 * $count;
+        $valsOffset = $keysOffset + strlen($ids);
+        
+        $mo = pack('Iiiiiii', $magic, $revision, $count, $idsOffset, $strsOffset, 0, 0);
+        
+        foreach ($idsIndex as $index) {
+            $mo .= pack('ii', $index[1], $keysOffset + $index[0]);
+        }
+        
+        foreach ($strsIndex as $index) {
+            $mo .= pack('ii', $index[1], $valsOffset + $index[0]);
+        }
+        
+        $mo .= $ids . $strs;
+        
+        return $mo;
+    }
     
     /**
      * Execute translation
@@ -268,13 +588,25 @@ class Translator
         echo "Plugin: {$pluginName}\n";
         echo "Path: {$this->pluginRoot}\n";
         echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
-        echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n\n";
+        echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
+        echo "Weblate: " . ($this->weblateEnabled ? 'Enabled' : 'Disabled') . "\n\n";
         
         if (!$this->dryRun && !$this->getApiKey()) {
             fwrite(STDERR, "Error: OPENAI_API_KEY environment variable not set.\n");
             fwrite(STDERR, "Please set your OpenAI API key:\n");
             fwrite(STDERR, "  export OPENAI_API_KEY=your-api-key-here\n\n");
             return false;
+        }
+        
+        // Step 1: Download existing translations from Weblate (if enabled)
+        if ($this->weblateEnabled && !$this->dryRun) {
+            echo "📥 Step 1: Downloading existing translations from Weblate...\n";
+            try {
+                $this->downloadFromWeblate(true); // Silent mode
+                echo "✓ Existing translations downloaded\n\n";
+            } catch (Exception $e) {
+                echo "⚠️  No existing translations found on Weblate (this is normal for new projects)\n\n";
+            }
         }
         
         $potFiles = $this->findPotFiles();
@@ -284,6 +616,7 @@ class Translator
             return false;
         }
         
+        echo "📝 Step 2: Running AI translation with Potomatic...\n";
         echo "POT files found: " . count($potFiles) . "\n\n";
         
         $success = true;
@@ -297,13 +630,14 @@ class Translator
             try {
                 $command = $this->buildCommand($potFile, $textDomain);
                 
-                echo "\nExecuting translation...\n\n";
+                echo "\n" . str_repeat('-', 50) . "\n";
+                echo "🤖 Running Potomatic AI Translation...\n";
+                echo "This may take several minutes depending on the number of strings.\n";
+                echo str_repeat('-', 50) . "\n\n";
                 
-                $output = [];
+                // Use passthru for real-time output
                 $returnCode = 0;
-                exec($command . ' 2>&1', $output, $returnCode);
-                
-                echo implode("\n", $output) . "\n";
+                passthru($command . ' 2>&1', $returnCode);
                 
                 if ($returnCode === 0) {
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
@@ -315,6 +649,22 @@ class Translator
             } catch (Exception $e) {
                 fwrite(STDERR, "\n❌ Error: " . $e->getMessage() . "\n\n");
                 $success = false;
+            }
+        }
+        
+        // Step 3: Upload updated translations to Weblate (if enabled)
+        if ($this->weblateEnabled && !$this->dryRun && $success) {
+            echo "\n📤 Step 3: Uploading updated translations to Weblate...\n\n";
+            foreach ($potFiles as $potFile) {
+                $potFileName = basename($potFile);
+                $textDomain = str_replace('.pot', '', $potFileName);
+                
+                try {
+                    $this->uploadToWeblate($potFile, $textDomain);
+                } catch (Exception $e) {
+                    fwrite(STDERR, "⚠️  Warning: Weblate upload failed for {$textDomain}: " . $e->getMessage() . "\n\n");
+                    // Don't fail the whole process if Weblate upload fails
+                }
             }
         }
         

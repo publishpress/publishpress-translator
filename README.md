@@ -1,21 +1,24 @@
 # PublishPress Translations
 
-AI-powered translation automation for PublishPress plugins using Potomatic and OpenAI.
+AI-powered translation automation for PublishPress plugins using Potomatic, OpenAI, and Weblate.
 
 ## Features
 
-- AI-powered translations using OpenAI GPT models
-- Automatic detection of `.pot` files
-- Merges with existing translations (preserves manual edits)
-- Cost-effective (~$0.03 per language for 1,744 strings)
-- Supports 10+ languages by default
-- Dry-run mode for cost estimation
+- **AI-powered translations** using OpenAI GPT models
+- **Weblate integration** for translation management and human review
+- **Automatic upload/download** to/from Weblate
+- **Merges with existing translations** (preserves manual edits)
+- **Cost-effective** (~$0.03 per language for 1,744 strings)
+- **Supports 10+ languages** by default
+- **Dry-run mode** for cost estimation
+- **Automatic detection** of `.pot` files
 
 ## Requirements
 
 - PHP 7.2.5 or higher
 - Node.js 18+ and npm (for Potomatic CLI tool)
 - OpenAI API key ([Get one here](https://platform.openai.com/api-keys))
+- Weblate account and API token ([Sign up here](https://hosted.weblate.org/))
 - Plugin must have a `languages/` directory with `.pot` files
 
 ## Installation
@@ -46,7 +49,8 @@ AI-powered translation automation for PublishPress plugins using Potomatic and O
 {
     "scripts": {
         "translate": "lib/vendor/bin/publishpress-translate",
-        "translate:dry-run": "lib/vendor/bin/publishpress-translate --dry-run"
+        "translate:dry-run": "lib/vendor/bin/publishpress-translate --dry-run",
+        "translate:download": "lib/vendor/bin/publishpress-translate --download"
     }
 }
 ```
@@ -79,31 +83,42 @@ And Step 4 (manual Potomatic setup) won't be needed anymore!
 
 ## Usage
 
-### Set OpenAI API Key
+### Set Environment Variables
 
-Before translating, set your OpenAI API key as an environment variable:
+Before using the translation tools, set your API keys as environment variables:
 
 **Windows (PowerShell):**
 ```powershell
-$env:OPENAI_API_KEY="your-api-key-here"
+$env:OPENAI_API_KEY="sk-proj-your-openai-key"
+$env:WEBLATE_API_TOKEN="wlu_your-weblate-token"
 ```
 
 **Windows (CMD):**
 ```cmd
-set OPENAI_API_KEY=your-api-key-here
+set OPENAI_API_KEY=sk-proj-your-openai-key
+set WEBLATE_API_TOKEN=wlu_your-weblate-token
 ```
 
 **Mac/Linux:**
 ```bash
-export OPENAI_API_KEY=your-api-key-here
+export OPENAI_API_KEY=sk-proj-your-openai-key
+export WEBLATE_API_TOKEN=wlu_your-weblate-token
 ```
 
 Or create a `.env` file in your plugin root (don't commit this!):
 ```
-OPENAI_API_KEY=your-api-key-here
+OPENAI_API_KEY=sk-proj-your-openai-key
+WEBLATE_API_TOKEN=wlu_your-weblate-token
 ```
 
-### Translate Your Plugin
+**Get your Weblate API token:**
+1. Sign up at [hosted.weblate.org](https://hosted.weblate.org/)
+2. Go to your profile: https://hosted.weblate.org/accounts/profile/#api
+3. Copy your personal API key
+
+### Complete Translation Workflow
+
+#### 1. Run Translation (Full Cycle)
 
 **From dev-workspace (PublishPress plugins with Docker):**
 ```bash
@@ -113,7 +128,7 @@ OPENAI_API_KEY=your-api-key-here
 # Dry run (preview cost, no API calls)
 composer translate:dry-run
 
-# Actual translation
+# Full translation cycle
 composer translate
 ```
 
@@ -122,17 +137,57 @@ composer translate
 # Dry run
 composer translate:dry-run
 
-# Actual translation
+# Full translation cycle
 composer translate
 ```
+
+**What happens when you run `composer translate`:**
+
+1. **📥 Download** - Pulls existing translations from Weblate (if project exists)
+2. **🤖 AI Translate** - Potomatic adds translations for new/missing strings
+3. **📤 Upload** - Pushes updated translations back to Weblate
+
+This ensures:
+- Existing translations (including human edits) are preserved
+- Only new/missing strings are translated by AI
+- Weblate always has the latest translations
+
+#### 2. Review & Improve in Weblate (Optional)
+
+After running translate, you or community translators can:
+1. Visit https://hosted.weblate.org/projects/YOUR-PLUGIN/
+2. Review and improve AI-generated translations
+3. Use Weblate's translation memory and suggestions
+4. Collaborate with community translators
+
+#### 3. Download Only (Before Building)
+
+If you just want to download the latest translations without running AI translation:
+
+```bash
+# Download latest from Weblate (no AI translation)
+composer translate:download
+```
+
+Use this when:
+- Translators made changes in Weblate
+- You want to sync before building your plugin
+- You don't need to add new translations
+
+#### 4. Build Plugin
+
+Your `languages/` folder now contains the latest translations, ready to be bundled with your plugin.
 
 **Advanced options:**
 ```bash
 # Custom languages only
-vendor/bin/publishpress-translate --languages=de_DE,fr_FR,es_ES
+lib/vendor/bin/publishpress-translate --languages=de_DE,fr_FR,es_ES
 
 # Force re-translate all strings (ignore existing translations)
-vendor/bin/publishpress-translate --force
+lib/vendor/bin/publishpress-translate --force
+
+# Download specific languages
+lib/vendor/bin/publishpress-translate --download --languages=de_DE,fr_FR
 ```
 
 **Note:** The library automatically detects your environment (dev-workspace vs plugin root) and uses the correct vendor path.
@@ -153,24 +208,60 @@ The tool translates into these languages by default:
 
 ## How It Works
 
-1. Scans your plugin's `languages/` directory for `.pot` files
-2. For each `.pot` file, generates AI translations using OpenAI
-3. Creates/updates `.po` files for each target language
-4. Merges with existing translations (preserves manual edits)
-5. Outputs translation files ready for WordPress to use
+### Translation Cycle (`composer translate`)
 
-## One-Time Setup
+**Step 1: Download from Weblate** (if enabled)
+- Pulls existing translations from Weblate
+- Preserves human edits and community contributions
+- Skips if project doesn't exist yet (normal for new plugins)
 
-Set your OpenAI API key permanently (recommended):
+**Step 2: AI Translation with Potomatic**
+- Scans your plugin's `languages/` directory for `.pot` files
+- Generates AI translations for new/missing strings only
+- Merges with existing translations (preserves manual edits)
+- Creates/updates `.po` and `.mo` files for each target language
+
+**Step 3: Upload to Weblate** (if enabled)
+- Creates project on Weblate (using plugin name as project slug)
+- Creates component for each text domain
+- Uploads POT template and all PO translations
+- Provides link to view/edit in Weblate
+
+### Download Only (`composer translate:download`)
+
+1. Connects to Weblate using your API token
+2. Finds your plugin's project and components
+3. Downloads latest `.po` files for all languages
+4. Converts to `.mo` files for WordPress
+5. Saves to your `languages/` folder
+
+**Use this when:**
+- You want to sync translations before building
+- Translators made changes in Weblate
+- You don't need to run AI translation
+
+### Weblate Integration
+
+- **Automatic sync** - Download → Translate → Upload in one command
+- **Preserves human edits** - Existing translations are never overwritten
+- **Automatic project creation** - Uses plugin slug as project name
+- **Component per text domain** - Each `.pot` file becomes a component
+- **Optional** - Works without Weblate if token not set
+
+## One-Time Setup (Recommended)
+
+Set your API keys permanently:
 
 **Windows:**
 ```powershell
 [System.Environment]::SetEnvironmentVariable('OPENAI_API_KEY', 'sk-proj-your-key', 'User')
+[System.Environment]::SetEnvironmentVariable('WEBLATE_API_TOKEN', 'wlu_your-token', 'User')
 ```
 
 **Mac/Linux (add to ~/.bashrc or ~/.zshrc):**
 ```bash
 export OPENAI_API_KEY=sk-proj-your-key
+export WEBLATE_API_TOKEN=wlu_your-token
 ```
 
 ## Troubleshooting
@@ -183,12 +274,23 @@ This shouldn't happen if you installed via Composer. If it does, please report i
 
 Make sure you've set the environment variable before running the translation command.
 
+### "Weblate not configured" Error
+
+This appears when running `--download` without `WEBLATE_API_TOKEN` set. Weblate integration is optional for generation but required for download.
+
 ### "No .pot files found" Error
 
 Ensure your plugin has a `languages/` directory with `.pot` translation template files. Generate these using tools like:
 - [WP-CLI i18n make-pot](https://developer.wordpress.org/cli/commands/i18n/make-pot/)
 - [Poedit](https://poedit.net/)
 - [Loco Translate](https://wordpress.org/plugins/loco-translate/)
+
+### Weblate Upload Fails
+
+If Weblate upload fails, the translation process continues (translations are still saved locally). Check:
+- API token is correct
+- You have permissions on Weblate
+- Project/component names are valid (no special characters)
 
 ## Development
 
