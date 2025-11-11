@@ -415,11 +415,11 @@ class Translator
             return false;
         }
         
-        $pluginName = $this->getPluginName();
+        $pluginSlug = $this->getPluginSlug();
         
         echo "\n📤 PublishPress Translation Upload\n";
         echo str_repeat('=', 50) . "\n\n";
-        echo "Plugin: {$pluginName}\n";
+        echo "Plugin: {$pluginSlug}\n";
         echo "Path: {$this->pluginRoot}\n\n";
         
         $potFiles = $this->findPotFiles();
@@ -448,7 +448,7 @@ class Translator
         }
         
         echo str_repeat('=', 50) . "\n";
-        echo "✨ Upload " . ($success ? 'complete' : 'finished with errors') . " for {$pluginName}!\n\n";
+        echo "✨ Upload " . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}!\n\n";
         
         return $success;
     }
