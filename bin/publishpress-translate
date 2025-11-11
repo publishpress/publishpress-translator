@@ -41,6 +41,14 @@ if (!$autoloaderFound) {
 
 use PublishPress\Translations\Translator;
 
+$pluginRoot = getcwd();
+
+if (!file_exists($pluginRoot . '/composer.json')) {
+    fwrite(STDERR, "Error: Not in a plugin directory. No composer.json found.\n");
+    fwrite(STDERR, "Please run this command from your plugin's root directory.\n");
+    exit(1);
+}
+
 require_once __DIR__ . '/setup-potomatic.php';
 
 $options = getopt('', [
