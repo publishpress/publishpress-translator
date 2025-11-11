@@ -335,15 +335,15 @@ class Translator
         
         echo "\n Uploading to Weblate...\n";
         
-        $pluginName = $this->getPluginName();
-        $projectSlug = $pluginName;
+        $pluginSlug = $this->getPluginSlug();
+        $projectSlug = $pluginSlug;
         $componentSlug = $textDomain;
         
         // Step 1: Ensure project exists
         echo "  • Checking project '{$projectSlug}'...\n";
         if (!$this->weblateClient->projectExists($projectSlug)) {
             echo "  • Creating project '{$projectSlug}'...\n";
-            $this->weblateClient->createProject($projectSlug, $pluginName);
+            $this->weblateClient->createProject($projectSlug, $pluginSlug);
         }
         
         // Step 2: Check if component exists
@@ -469,13 +469,13 @@ class Translator
             return false;
         }
         
-        $pluginName = $this->getPluginName();
-        $projectSlug = $pluginName;
+        $pluginSlug = $this->getPluginSlug();
+        $projectSlug = $pluginSlug;
         
         if (!$silent) {
             echo "\n⬇️  Downloading Translations from Weblate\n";
             echo str_repeat('=', 50) . "\n\n";
-            echo "Plugin: {$pluginName}\n";
+            echo "Plugin: {$pluginSlug}\n";
             echo "Project: {$projectSlug}\n\n";
         }
         
