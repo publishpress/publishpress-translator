@@ -363,10 +363,13 @@ class Translator
                 throw new Exception("Failed to create component: " . $e->getMessage());
             }
         }
-        
+
         // Step 3: Upload all PO files from local languages directory
         echo "  • Uploading translation files...\n";
         $poFiles = glob($this->languagesDir . "/{$componentSlug}-*.po");
+        
+        $uploadedCount = 0;
+        $failedCount = 0;
         
         foreach ($poFiles as $poFile) {
             // Extract language code from filename (e.g., publishpress-checklists-fr_FR.po -> fr_FR)
@@ -380,12 +383,18 @@ class Translator
             try {
                 $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
                 echo "    ✓ Uploaded {$languageCode}\n";
+                $uploadedCount++;
             } catch (Exception $e) {
                 echo "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n";
+                $failedCount++;
             }
         }
         
-        echo "  ✓ All translations uploaded\n";
+        if ($failedCount > 0) {
+            echo "  ⚠️  {$uploadedCount} uploaded, {$failedCount} failed\n";
+        } else {
+            echo "  ✓ All translations uploaded\n";
+        }
 
         echo "  View at: https://hosted.weblate.org/projects/{$projectSlug}/{$componentSlug}/\n\n";
     }

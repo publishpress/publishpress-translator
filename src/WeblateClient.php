@@ -238,10 +238,13 @@ class WeblateClient
     {
         // Special mappings that don't follow the standard pattern
         $specialMappings = [
-            'zh_CN' => 'zh_Hans',   // Simplified Chinese
-            'zh_TW' => 'zh_Hant',   // Traditional Chinese
-            'fil' => 'fil',         // Filipino (stays as-is)
-            'yo' => 'yo',           // Yoruba (stays as-is)
+            'zh_CN' => 'zh_Hans',
+            'zh_TW' => 'zh_Hant',
+            'fil' => 'fil',
+            'yo' => 'yo',
+            'en_GB' => 'en_GB',
+            'pt_BR' => 'pt_BR',
+            'sr_RS' => 'sr_RS',
         ];
         
         // If there's a special mapping, use it
