@@ -227,43 +227,97 @@ class WeblateClient
             throw new Exception("Error uploading POT file: " . $e->getMessage());
         }
     }
+
+    /**
+     * Map WordPress language codes to Weblate language codes
+     * 
+     * @param string $wpLangCode WordPress language code (e.g., de_DE, fr_FR, ja, fi)
+     * @return string Weblate language code
+     */
+    private function mapLanguageCode($wpLangCode)
+    {
+        // Special mappings that don't follow the standard pattern
+        $specialMappings = [
+            'zh_CN' => 'zh_Hans',   // Simplified Chinese
+            'zh_TW' => 'zh_Hant',   // Traditional Chinese
+            'fil' => 'fil',         // Filipino (stays as-is)
+            'yo' => 'yo',           // Yoruba (stays as-is)
+        ];
+        
+        // If there's a special mapping, use it
+        if (isset($specialMappings[$wpLangCode])) {
+            return $specialMappings[$wpLangCode];
+        }
+        
+        // For standard WordPress codes like de_DE, es_ES, fr_FR
+        // Try to extract just the language part (de, es, fr)
+        if (strpos($wpLangCode, '_') !== false) {
+            $parts = explode('_', $wpLangCode);
+            $languageCode = strtolower($parts[0]);
+            $countryCode = strtolower($parts[1]);
+            
+            // Some languages use country codes in Weblate (e.g., en_GB, pt_BR)
+            // Try the full code first, fallback to language code only
+            $fullCode = "{$languageCode}_{$countryCode}";
+            
+            // Known Weblate codes that use full format
+            $fullFormatCodes = ['en_GB', 'pt_BR', 'he_IL', 'sr_RS'];
+            
+            if (in_array($fullCode, $fullFormatCodes)) {
+                return $fullCode;
+            }
+            
+            // Otherwise return just the language code
+            return $languageCode;
+        }
+        
+        // If it's already in a short format (ja, fi, etc.), return as-is
+        return strtolower($wpLangCode);
+    }
     
     /**
      * Upload PO file for a language
      * 
      * @param string $projectSlug
      * @param string $componentSlug
-     * @param string $language
+     * @param string $language WordPress language code
      * @param string $poFilePath
-     * @return array
+     * @return bool
      * @throws Exception
      */
     public function uploadPo($projectSlug, $componentSlug, $language, $poFilePath)
     {
         try {
-            // Ensure translation exists for this language
-            $this->ensureTranslation($projectSlug, $componentSlug, $language);
+            // Map WordPress language code to Weblate code
+            $weblateLanguage = $this->mapLanguageCode($language);
             
+            // Ensure translation exists for this language
+            $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
+            
+            // Upload the file using the correct endpoint
             $response = $this->client->post(
-                "translations/{$projectSlug}/{$componentSlug}/{$language}/file/",
+                "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
                 [
                     'multipart' => [
                         [
                             'name' => 'file',
                             'contents' => fopen($poFilePath, 'r'),
-                            'filename' => basename($poFilePath),
                         ],
                         [
                             'name' => 'method',
                             'contents' => 'replace',
                         ],
-                    ]
+                    ],
                 ]
             );
             
-            return json_decode($response->getBody()->getContents(), true);
+            return $response->getStatusCode() === 200;
         } catch (GuzzleException $e) {
-            throw new Exception("Error uploading PO file for {$language}: " . $e->getMessage());
+            $errorBody = '';
+            if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                $errorBody = $e->getResponse()->getBody()->getContents();
+            }
+            throw new Exception("Error uploading PO file for {$language}: " . $e->getMessage() . "\n" . $errorBody);
         }
     }
     
@@ -291,7 +345,11 @@ class WeblateClient
                         ]
                     ]);
                 } catch (GuzzleException $createError) {
-                    throw new Exception("Error creating translation for {$language}: " . $createError->getMessage());
+                    $errorBody = '';
+                    if (method_exists($createError, 'getResponse') && $createError->getResponse()) {
+                        $errorBody = $createError->getResponse()->getBody()->getContents();
+                    }
+                    throw new Exception("Error creating translation for {$language}: " . $createError->getMessage() . "\n" . $errorBody);
                 }
             } else {
                 throw new Exception("Error checking translation for {$language}: " . $e->getMessage());
