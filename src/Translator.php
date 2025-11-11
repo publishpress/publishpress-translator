@@ -346,16 +346,29 @@ class Translator
             $this->weblateClient->createProject($projectSlug, $pluginName);
         }
         
-        // Step 2: Ensure component exists
+        // Step 2: Check if component exists
         echo "  • Checking component '{$componentSlug}'...\n";
         if (!$this->weblateClient->componentExists($projectSlug, $componentSlug)) {
-            echo "  • Creating component '{$componentSlug}'...\n";
-            $this->weblateClient->createComponent($projectSlug, $componentSlug, $textDomain, $potFile);
-        } else {
-            // Update POT file if component exists
-            echo "  • Updating POT file...\n";
-            $this->weblateClient->uploadPot($projectSlug, $componentSlug, $potFile);
+            echo "  ⚠️  Component '{$componentSlug}' does not exist on Weblate.\n";
+            echo "\n";
+            echo "  Please create it manually in Weblate UI:\n";
+            echo "  1. Go to: https://hosted.weblate.org/projects/{$projectSlug}/\n";
+            echo "  2. Click 'Add new translation component'\n";
+            echo "  3. Use these settings:\n";
+            echo "     - Component name: {$textDomain}\n";
+            echo "     - Component slug: {$componentSlug}\n";
+            echo "     - File format: Gettext PO file\n";
+            echo "     - File mask: languages/{$componentSlug}-*.po\n";
+            echo "     - Template: languages/{$componentSlug}.pot\n";
+            echo "     - VCS: No VCS (file uploads only)\n";
+            echo "  4. Then run this command again to upload files.\n";
+            echo "\n";
+            throw new Exception("Component not found. Please create it manually first.");
         }
+        
+        // Update POT file
+        echo "  • Updating POT file...\n";
+        $this->weblateClient->uploadPot($projectSlug, $componentSlug, $potFile);
         
         // Step 3: Upload PO files
         $poFiles = [];
