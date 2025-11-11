@@ -41,6 +41,8 @@ if (!$autoloaderFound) {
 
 use PublishPress\Translations\Translator;
 
+require_once __DIR__ . '/setup-potomatic.php';
+
 $options = getopt('', [
     'dry-run',
     'force',
