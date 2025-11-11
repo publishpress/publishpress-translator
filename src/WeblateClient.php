@@ -372,8 +372,11 @@ class WeblateClient
     public function downloadPo($projectSlug, $componentSlug, $language)
     {
         try {
+            // Map WordPress language code to Weblate code
+            $weblateLanguage = $this->mapLanguageCode($language);
+            
             $response = $this->client->get(
-                "translations/{$projectSlug}/{$componentSlug}/{$language}/file/"
+                "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/"
             );
             
             return $response->getBody()->getContents();
