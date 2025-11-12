@@ -288,13 +288,10 @@ class WeblateClient
     public function uploadPo($projectSlug, $componentSlug, $language, $poFilePath)
     {
         try {
-            // Map WordPress language code to Weblate code
             $weblateLanguage = $this->mapLanguageCode($language);
             
-            // Ensure translation exists for this language
             $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
             
-            // Upload the file using the correct endpoint
             $response = $this->client->post(
                 "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
                 [
@@ -305,7 +302,7 @@ class WeblateClient
                         ],
                         [
                             'name' => 'method',
-                            'contents' => 'replace',
+                            'contents' => 'fuzzy',
                         ],
                     ],
                 ]
