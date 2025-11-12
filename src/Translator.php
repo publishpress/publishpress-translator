@@ -169,18 +169,17 @@ class Translator
     private function getPluginSlug()
     {
         $composerFile = $this->pluginRoot . '/composer.json';
+        
         if (file_exists($composerFile)) {
-            $composerData = json_decode(file_get_contents($composerFile), true);
-            if (isset($composerData['extra']['plugin-slug'])) {
-                return $composerData['extra']['plugin-slug'];
-            }
-            if (isset($composerData['name'])) {
-                $parts = explode('/', $composerData['name']);
-                if (count($parts) === 2) {
-                    return $parts[0] . '-' . $parts[1];
-                }
+            $composer = json_decode(file_get_contents($composerFile), true);
+            
+            if (isset($composer['name'])) {
+                $parts = explode('/', $composer['name']);
+                return end($parts) ?: 'project';
             }
         }
+        
+        // Fallback to directory name
         return basename($this->pluginRoot);
     }
     
@@ -685,11 +684,11 @@ class Translator
      */
     public function translate()
     {
-        $pluginName = $this->getPluginName();
+        $pluginSlug = $this->getPluginSlug();
         
         echo "\n🌍 PublishPress Translation Tool\n";
         echo str_repeat('=', 50) . "\n\n";
-        echo "Plugin: {$pluginName}\n";
+        echo "Plugin: {$pluginSlug}\n";
         echo "Path: {$this->pluginRoot}\n";
         echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
         echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
