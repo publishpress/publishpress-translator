@@ -7,20 +7,6 @@
  * @package PublishPress\Translations
  */
 
-use PublishPress\Translations\Translator;
-
-$isComposerScript = (
-    getenv('COMPOSER') !== false ||
-    getenv('COMPOSER_PROCESS_TIMEOUT') !== false ||
-    (isset($_SERVER['_']) && strpos($_SERVER['_'], 'composer') !== false)
-);
-
-if ($isComposerScript) {
-    set_time_limit(3600);
-
-    putenv('COMPOSER_PROCESS_TIMEOUT=3600');
-}
-
 $possibleAutoloadPaths = [
     __DIR__ . '/../../../../autoload.php',
     __DIR__ . '/../../../autoload.php',
@@ -53,6 +39,8 @@ if (!$autoloaderFound) {
     fwrite(STDERR, "\nPlease run 'composer install' first.\n");
     exit(1);
 }
+
+use PublishPress\Translations\Translator;
 
 $pluginRoot = getcwd();
 
@@ -145,7 +133,7 @@ try {
         exit(1);
     }
     
-} catch (Throwable $e) {
+} catch (Exception $e) {
     fwrite(STDERR, "Error: " . $e->getMessage() . "\n");
     exit(1);
 }

@@ -200,17 +200,13 @@ class WeblateClient
     public function uploadPot($projectSlug, $componentSlug, $potFilePath)
     {
         try {
-            $fileHandle = fopen($potFilePath, 'r');
-            if ($fileHandle === false) {
-                throw new Exception("Failed to open POT file: {$potFilePath}");
-            }
             $response = $this->client->post(
                 "translations/{$projectSlug}/{$componentSlug}/en/file/",
                 [
                     'multipart' => [
                         [
                             'name' => 'file',
-                            'contents' => $fileHandle,
+                            'contents' => fopen($potFilePath, 'r'),
                             'filename' => basename($potFilePath),
                         ],
                         [
@@ -287,20 +283,13 @@ class WeblateClient
             
             $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
             
-            if (!file_exists($poFilePath)) {
-                throw new Exception("PO file does not exist: {$poFilePath}");
-            }
-            $fileHandle = fopen($poFilePath, 'r');
-            if ($fileHandle === false) {
-                throw new Exception("Failed to open PO file: {$poFilePath}");
-            }
             $response = $this->client->post(
                 "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
                 [
                     'multipart' => [
                         [
                             'name' => 'file',
-                            'contents' => $fileHandle,
+                            'contents' => fopen($poFilePath, 'r'),
                         ],
                         [
                             'name' => 'method',
