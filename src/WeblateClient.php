@@ -62,7 +62,7 @@ class WeblateClient
                 'Authorization' => 'Token ' . $this->apiToken,
                 'Accept' => 'application/json',
             ],
-            'timeout' => 30,
+            'timeout' => 120,
         ]);
     }
     
@@ -137,23 +137,28 @@ class WeblateClient
      * @param string $componentSlug
      * @param string $componentName
      * @param string $potFilePath
-     * @param string|null $pluginSlug GitHub repo slug (defaults to projectSlug)
+     * @param string|null $gitRepoSlug GitHub repo slug
      * @return array
      * @throws Exception
      */
-    public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath, $pluginSlug = null)
+    public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath, $gitRepoSlug = null)
     {
         try {
-            // Read POT file content
             $potContent = file_get_contents($potFilePath);
             if ($potContent === false) {
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
             
-            // Use GitHub repo for .pot file reference, but disable auto-updates
-            // We'll upload .po files manually via API to keep them current
-            $repoSlug = $pluginSlug ?: $projectSlug;
-            $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+            $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
+            $repoSlug = $gitRepoSlug ?: $componentSlug;
+            
+            if ($repoType === 'ssh') {
+                $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+            } else {
+                $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+                $pushUrl = '';
+            }
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
                 'json' => [
@@ -161,7 +166,7 @@ class WeblateClient
                     'slug' => $componentSlug,
                     'repo' => $repoUrl,
                     'branch' => 'development',
-                    'push' => '',
+                    'push' => $pushUrl,
                     'vcs' => 'git',
                     'file_format' => 'po',
                     'filemask' => "languages/{$componentSlug}-*.po",
@@ -173,10 +178,6 @@ class WeblateClient
             ]);
             
             $result = json_decode($response->getBody()->getContents(), true);
-            
-            // After creating component, upload the POT file
-            $this->uploadPot($projectSlug, $componentSlug, $potFilePath);
-            
             return $result;
         } catch (GuzzleException $e) {
             $errorBody = '';
@@ -221,43 +222,90 @@ class WeblateClient
             throw new Exception("Error uploading POT file: " . $e->getMessage());
         }
     }
+
+    /**
+     * Map WordPress language codes to Weblate language codes
+     * 
+     * @param string $wpLangCode WordPress language code
+     * @return string Weblate language code
+     */
+    private function mapLanguageCode($wpLangCode)
+    {
+        // Special mappings that don't follow the standard pattern
+        $specialMappings = [
+            'zh_CN' => 'zh_Hans',
+            'zh_TW' => 'zh_Hant',
+            'fil' => 'fil',
+            'yo' => 'yo',
+            'en_GB' => 'en_GB',
+            'pt_BR' => 'pt_BR',
+            'sr_RS' => 'sr_RS',
+        ];
+        
+        // If there's a special mapping, use it
+        if (isset($specialMappings[$wpLangCode])) {
+            return $specialMappings[$wpLangCode];
+        }
+
+        if (strpos($wpLangCode, '_') !== false) {
+            $parts = explode('_', $wpLangCode);
+            $languageCode = strtolower($parts[0]);
+            $countryCode = strtolower($parts[1]);
+
+            $fullCode = "{$languageCode}_{$countryCode}";
+
+            $fullFormatCodes = ['en_GB', 'pt_BR', 'he_IL', 'sr_RS'];
+            
+            if (in_array($fullCode, $fullFormatCodes)) {
+                return $fullCode;
+            }
+            
+            return $languageCode;
+        }
+        
+        return strtolower($wpLangCode);
+    }
     
     /**
      * Upload PO file for a language
      * 
      * @param string $projectSlug
      * @param string $componentSlug
-     * @param string $language
+     * @param string $language WordPress language code
      * @param string $poFilePath
-     * @return array
+     * @return bool
      * @throws Exception
      */
     public function uploadPo($projectSlug, $componentSlug, $language, $poFilePath)
     {
         try {
-            // Ensure translation exists for this language
-            $this->ensureTranslation($projectSlug, $componentSlug, $language);
+            $weblateLanguage = $this->mapLanguageCode($language);
+            
+            $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
             
             $response = $this->client->post(
-                "translations/{$projectSlug}/{$componentSlug}/{$language}/file/",
+                "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
                 [
                     'multipart' => [
                         [
                             'name' => 'file',
                             'contents' => fopen($poFilePath, 'r'),
-                            'filename' => basename($poFilePath),
                         ],
                         [
                             'name' => 'method',
-                            'contents' => 'replace',
+                            'contents' => 'fuzzy',
                         ],
-                    ]
+                    ],
                 ]
             );
             
-            return json_decode($response->getBody()->getContents(), true);
+            return $response->getStatusCode() === 200;
         } catch (GuzzleException $e) {
-            throw new Exception("Error uploading PO file for {$language}: " . $e->getMessage());
+            $errorBody = '';
+            if (method_exists($e, 'getResponse') && $e->getResponse()) {
+                $errorBody = $e->getResponse()->getBody()->getContents();
+            }
+            throw new Exception("Error uploading PO file for {$language}: " . $e->getMessage() . "\n" . $errorBody);
         }
     }
     
@@ -273,11 +321,9 @@ class WeblateClient
     private function ensureTranslation($projectSlug, $componentSlug, $language)
     {
         try {
-            // Check if translation exists
             $this->client->get("translations/{$projectSlug}/{$componentSlug}/{$language}/");
         } catch (GuzzleException $e) {
             if ($e->getCode() === 404) {
-                // Translation doesn't exist, create it
                 try {
                     $this->client->post("components/{$projectSlug}/{$componentSlug}/translations/", [
                         'json' => [
@@ -285,7 +331,11 @@ class WeblateClient
                         ]
                     ]);
                 } catch (GuzzleException $createError) {
-                    throw new Exception("Error creating translation for {$language}: " . $createError->getMessage());
+                    $errorBody = '';
+                    if (method_exists($createError, 'getResponse') && $createError->getResponse()) {
+                        $errorBody = $createError->getResponse()->getBody()->getContents();
+                    }
+                    throw new Exception("Error creating translation for {$language}: " . $createError->getMessage() . "\n" . $errorBody);
                 }
             } else {
                 throw new Exception("Error checking translation for {$language}: " . $e->getMessage());
@@ -305,14 +355,16 @@ class WeblateClient
     public function downloadPo($projectSlug, $componentSlug, $language)
     {
         try {
+            $weblateLanguage = $this->mapLanguageCode($language);
+            
             $response = $this->client->get(
-                "translations/{$projectSlug}/{$componentSlug}/{$language}/file/"
+                "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/"
             );
             
             return $response->getBody()->getContents();
         } catch (GuzzleException $e) {
             if ($e->getCode() === 404) {
-                return null; // Translation doesn't exist yet
+                return null;
             }
             throw new Exception("Error downloading PO file for {$language}: " . $e->getMessage());
         }

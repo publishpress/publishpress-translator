@@ -50,7 +50,11 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
     "scripts": {
         "translate": "lib/vendor/bin/publishpress-translate",
         "translate:dry-run": "lib/vendor/bin/publishpress-translate --dry-run",
-        "translate:download": "lib/vendor/bin/publishpress-translate --download"
+        "translate:download": "lib/vendor/bin/publishpress-translate --download",
+        "translate:upload": "lib/vendor/bin/publishpress-translate --upload",
+        "translate:custom": "lib/vendor/bin/publishpress-translate --languages",
+        "translate:force": "lib/vendor/bin/publishpress-translate --force",
+        "translate:force-custom": "lib/vendor/bin/publishpress-translate --force --languages"
     }
 }
 ```
@@ -61,17 +65,7 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 composer update
 ```
 
-### Step 4: Setup Potomatic
-
-⚠️ **Required for now (until published on Packagist):**
-
-```bash
-php lib/vendor/publishpress/translations/bin/setup-potomatic.php
-```
-
----
-
-**Once on Packagist:** Change Step 1 to:
+**Once on Packagist:** We can change Step 1 to:
 ```json
 {
     "require": {
@@ -79,7 +73,6 @@ php lib/vendor/publishpress/translations/bin/setup-potomatic.php
     }
 }
 ```
-And Step 4 (manual Potomatic setup) won't be needed anymore!
 
 ## Usage
 
@@ -148,13 +141,13 @@ composer translate
 3. **📤 Upload** - Pushes updated translations back to Weblate
 
 This ensures:
-- Existing translations (including human edits) are preserved
+- Existing translations are preserved
 - Only new/missing strings are translated by AI
 - Weblate always has the latest translations
 
 #### 2. Review & Improve in Weblate (Optional)
 
-After running translate, you or community translators can:
+After running translate, we then can:
 1. Visit https://hosted.weblate.org/projects/YOUR-PLUGIN/
 2. Review and improve AI-generated translations
 3. Use Weblate's translation memory and suggestions
@@ -171,12 +164,8 @@ composer translate:download
 
 Use this when:
 - Translators made changes in Weblate
-- You want to sync before building your plugin
+- You want to sync before building plugin
 - You don't need to add new translations
-
-#### 4. Build Plugin
-
-Your `languages/` folder now contains the latest translations, ready to be bundled with your plugin.
 
 **Advanced options:**
 ```bash
@@ -196,15 +185,14 @@ lib/vendor/bin/publishpress-translate --download --languages=de_DE,fr_FR
 
 The tool translates into these languages by default:
 - German (de_DE)
-- Spanish (es_ES)
-- French (fr_FR)
-- Hebrew (he_IL)
-- Italian (it_IT)
+- Brazilian Portuguese (pt_BR)
+- Indonesian (id_ID)
+- Filipino (fil)
+- Russian (ru_RU)
+- Yoruba (yo)
+- Finnish (fi)
 - Japanese (ja)
 - Korean (ko_KR)
-- Russian (ru_RU)
-- Chinese Simplified (zh_CN)
-- Chinese Traditional (zh_TW)
 
 ## How It Works
 
@@ -213,7 +201,7 @@ The tool translates into these languages by default:
 **Step 1: Download from Weblate** (if enabled)
 - Pulls existing translations from Weblate
 - Preserves human edits and community contributions
-- Skips if project doesn't exist yet (normal for new plugins)
+- Creates project if it doesn't exist yet
 
 **Step 2: AI Translation with Potomatic**
 - Scans your plugin's `languages/` directory for `.pot` files
@@ -222,7 +210,7 @@ The tool translates into these languages by default:
 - Creates/updates `.po` and `.mo` files for each target language
 
 **Step 3: Upload to Weblate** (if enabled)
-- Creates project on Weblate (using plugin name as project slug)
+- Creates project on Weblate (using plugin slug as project slug)
 - Creates component for each text domain
 - Uploads POT template and all PO translations
 - Provides link to view/edit in Weblate

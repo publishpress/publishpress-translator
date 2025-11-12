@@ -169,18 +169,17 @@ class Translator
     private function getPluginSlug()
     {
         $composerFile = $this->pluginRoot . '/composer.json';
+        
         if (file_exists($composerFile)) {
-            $composerData = json_decode(file_get_contents($composerFile), true);
-            if (isset($composerData['extra']['plugin-slug'])) {
-                return $composerData['extra']['plugin-slug'];
-            }
-            if (isset($composerData['name'])) {
-                $parts = explode('/', $composerData['name']);
-                if (count($parts) === 2) {
-                    return $parts[0] . '-' . $parts[1];
-                }
+            $composer = json_decode(file_get_contents($composerFile), true);
+            
+            if (isset($composer['name'])) {
+                $parts = explode('/', $composer['name']);
+                return end($parts) ?: 'project';
             }
         }
+        
+        // Fallback to directory name
         return basename($this->pluginRoot);
     }
     
@@ -320,7 +319,7 @@ class Translator
         return $cmd;
     }
 
-        /**
+    /**
      * Upload translations to Weblate (internal method)
      * 
      * @param string $potFile
@@ -336,7 +335,7 @@ class Translator
         echo "\n Uploading to Weblate...\n";
         
         $pluginSlug = $this->getPluginSlug();
-        $projectSlug = $pluginSlug;
+        $projectSlug = $this->getWeblateProjectSlug();
         $componentSlug = $textDomain;
         
         // Step 1: Ensure project exists
@@ -346,7 +345,7 @@ class Translator
             $this->weblateClient->createProject($projectSlug, $pluginSlug);
         }
         
-        // Step 2: Check if component exists
+        // Step 2: Ensure component exists, auto-create if needed
         echo "  • Checking component '{$componentSlug}'...\n";
         if (!$this->weblateClient->componentExists($projectSlug, $componentSlug)) {
             echo "  • Creating component '{$componentSlug}'...\n";
@@ -356,48 +355,74 @@ class Translator
                     $componentSlug,
                     $textDomain,
                     $potFile,
-                    $pluginSlug
+                    $this->getGitRepoSlug()
                 );
                 echo "  ✓ Component created successfully\n";
             } catch (Exception $e) {
                 throw new Exception("Failed to create component: " . $e->getMessage());
             }
         }
+
+        // Step 3: Upload all PO files from local languages directory
+        echo "  • Uploading translation files...\n";
+        $poFiles = glob($this->languagesDir . "/{$componentSlug}-*.po");
         
-        // Step 3: Update POT file
-        echo "  • Updating POT file...\n";
-        $this->weblateClient->uploadPot($projectSlug, $componentSlug, $potFile);
+        $uploadedCount = 0;
+        $failedCount = 0;
         
-        // Step 3: Upload PO files
-        $poFiles = [];
-        $files = scandir($this->languagesDir);
-        foreach ($files as $file) {
-            if (substr($file, 0, strlen($textDomain . '-')) === $textDomain . '-' && substr($file, -3) === '.po') {
-                $poFiles[] = $this->languagesDir . '/' . $file;
-            }
-        }
-        
-        if (empty($poFiles)) {
-            echo "  ⚠️  No PO files found to upload\n";
-            return;
-        }
-        
-        echo "  • Uploading " . count($poFiles) . " translation files...\n";
         foreach ($poFiles as $poFile) {
-            $fileName = basename($poFile);
-            // Extract language code from filename (e.g., "plugin-name-de_DE.po" -> "de_DE")
-            $language = str_replace($textDomain . '-', '', str_replace('.po', '', $fileName));
+            preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
+            if (!isset($matches[1])) {
+                continue;
+            }
+            
+            $languageCode = $matches[1];
             
             try {
-                $this->weblateClient->uploadPo($projectSlug, $componentSlug, $language, $poFile);
-                echo "    ✓ {$language}\n";
+                $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
+                echo "    ✓ Uploaded {$languageCode}\n";
+                $uploadedCount++;
             } catch (Exception $e) {
-                echo "    ✗ {$language}: " . $e->getMessage() . "\n";
+                if (strpos($e->getMessage(), 'read-only') !== false && 
+                    in_array($languageCode, ['en', 'en_US', 'en_GB'])) {
+                    echo "    ⊘ {$languageCode} (source language, read-only)\n";
+                } else {
+                    echo "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n";
+                    $failedCount++;
+                }
             }
         }
         
-        echo "\n✅ Weblate upload complete!\n";
+        if ($failedCount > 0) {
+            echo "  ⚠️  {$uploadedCount} uploaded, {$failedCount} failed\n";
+        } else {
+            echo "  ✓ All translations uploaded\n";
+        }
+
         echo "  View at: https://hosted.weblate.org/projects/{$projectSlug}/{$componentSlug}/\n\n";
+    }
+
+    /**
+     * Get GitHub repo slug from plugin root
+     * 
+     * @return string|null
+     */
+    private function getGitRepoSlug()
+    {
+        $gitDir = $this->pluginRoot . '/.git';
+        if (!is_dir($gitDir)) {
+            return null;
+        }
+        
+        $configFile = $gitDir . '/config';
+        if (file_exists($configFile)) {
+            $content = file_get_contents($configFile);
+            if (preg_match('/url\s*=\s*.*publishpress\/(.+?)(\.git)?$/m', $content, $matches)) {
+                return $matches[1];
+            }
+        }
+        
+        return null;
     }
     
     /**
@@ -450,6 +475,21 @@ class Translator
         
         return $success;
     }
+
+    /**
+     * Get Weblate project slug from composer.json or config
+     * 
+     * @return string
+    */
+    private function getWeblateProjectSlug()
+    {
+        $projectSlug = getenv('WEBLATE_PROJECT_SLUG');
+        if ($projectSlug) {
+            return $projectSlug;
+        }
+
+        return $this->getPluginSlug();
+    }
     
     /**
      * Download translations from Weblate
@@ -468,7 +508,7 @@ class Translator
         }
         
         $pluginSlug = $this->getPluginSlug();
-        $projectSlug = $pluginSlug;
+        $projectSlug = $this->getWeblateProjectSlug();
         
         if (!$silent) {
             echo "\n⬇️  Downloading Translations from Weblate\n";
@@ -477,7 +517,6 @@ class Translator
             echo "Project: {$projectSlug}\n\n";
         }
         
-        // Find all POT files to determine components
         $potFiles = $this->findPotFiles();
         
         if (empty($potFiles)) {
@@ -523,7 +562,6 @@ class Translator
                         $poFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.po';
                         file_put_contents($poFile, $poContent);
                         
-                        // Convert PO to MO
                         $moFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.mo';
                         $this->convertPoToMo($poFile, $moFile);
                         
@@ -564,10 +602,7 @@ class Translator
      * @return bool True on success
      */
     private function convertPoToMo($poFile, $moFile)
-    {
-        // Simple PO to MO conversion
-        // This is a basic implementation - for production, consider using gettext tools
-        
+    { 
         $entries = [];
         $currentEntry = null;
         $lines = file($poFile, FILE_IGNORE_NEW_LINES);
@@ -592,9 +627,7 @@ class Translator
         if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
             $entries[] = $currentEntry;
         }
-        
-        // Write MO file (simplified binary format)
-        // For production, use proper gettext library or msgfmt command
+
         $mo = $this->buildMoFile($entries);
         return file_put_contents($moFile, $mo) !== false;
     }
@@ -621,7 +654,6 @@ class Translator
      */
     private function buildMoFile($entries)
     {
-        // MO file magic number
         $magic = 0x950412de;
         $revision = 0;
         $count = count($entries);
@@ -667,11 +699,11 @@ class Translator
      */
     public function translate()
     {
-        $pluginName = $this->getPluginName();
+        $pluginSlug = $this->getPluginSlug();
         
         echo "\n🌍 PublishPress Translation Tool\n";
         echo str_repeat('=', 50) . "\n\n";
-        echo "Plugin: {$pluginName}\n";
+        echo "Plugin: {$pluginSlug}\n";
         echo "Path: {$this->pluginRoot}\n";
         echo "Languages: " . implode(', ', $this->targetLanguages) . "\n";
         echo "Mode: " . ($this->dryRun ? 'DRY RUN (no API calls)' : 'LIVE TRANSLATION') . "\n";
@@ -721,7 +753,6 @@ class Translator
                 echo "This may take several minutes depending on the number of strings.\n";
                 echo str_repeat('-', 50) . "\n\n";
                 
-                // Use passthru for real-time output
                 $returnCode = 0;
                 passthru($command . ' 2>&1', $returnCode);
                 
@@ -746,16 +777,15 @@ class Translator
                 $textDomain = str_replace('.pot', '', $potFileName);
                 
                 try {
-                    $this->uploadToWeblate($potFile, $textDomain);
+                    $this->uploadToWeblateInternal($potFile, $textDomain);
                 } catch (Exception $e) {
                     fwrite(STDERR, "⚠️  Warning: Weblate upload failed for {$textDomain}: " . $e->getMessage() . "\n\n");
-                    // Don't fail the whole process if Weblate upload fails
                 }
             }
         }
         
         echo str_repeat('=', 50) . "\n";
-        echo "✨ Translation " . ($success ? 'complete' : 'finished with errors') . " for {$pluginName}!\n\n";
+        echo "✨ Translation " . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}!\n\n";
         
         return $success;
     }
