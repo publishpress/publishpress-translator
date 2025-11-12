@@ -335,7 +335,7 @@ class Translator
         echo "\n Uploading to Weblate...\n";
         
         $pluginSlug = $this->getPluginSlug();
-        $projectSlug = $pluginSlug;
+        $projectSlug = $this->getWeblateProjectSlug();
         $componentSlug = $textDomain;
         
         // Step 1: Ensure project exists
@@ -475,6 +475,21 @@ class Translator
         
         return $success;
     }
+
+    /**
+     * Get Weblate project slug from composer.json or config
+     * 
+     * @return string
+    */
+    private function getWeblateProjectSlug()
+    {
+        $projectSlug = getenv('WEBLATE_PROJECT_SLUG');
+        if ($projectSlug) {
+            return $projectSlug;
+        }
+
+        return $this->getPluginSlug();
+    }
     
     /**
      * Download translations from Weblate
@@ -493,7 +508,7 @@ class Translator
         }
         
         $pluginSlug = $this->getPluginSlug();
-        $projectSlug = $pluginSlug;
+        $projectSlug = $this->getWeblateProjectSlug();
         
         if (!$silent) {
             echo "\n⬇️  Downloading Translations from Weblate\n";
