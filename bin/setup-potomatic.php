@@ -6,6 +6,12 @@
 
 $libDir = dirname(__DIR__);
 $potomaticDir = $libDir . '/potomatic';
+$nodeModulesDir = $potomaticDir . '/node_modules';
+
+if (is_dir($nodeModulesDir)) {
+    echo "✓ Potomatic already set up\n";
+    return;
+}
 
 echo "Setting up Potomatic CLI tool...\n";
 
@@ -20,6 +26,9 @@ if ($returnCode !== 0) {
     echo "Visit: https://nodejs.org/\n";
     exit(1);
 }
+
+$nodeVersion = trim($output[0] ?? '');
+echo "Found {$nodeVersion}\n";
 
 exec('npm --version 2>&1', $output, $returnCode);
 if ($returnCode !== 0) {
