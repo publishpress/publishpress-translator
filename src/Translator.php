@@ -372,7 +372,6 @@ class Translator
         $failedCount = 0;
         
         foreach ($poFiles as $poFile) {
-            // Extract language code from filename (e.g., publishpress-checklists-fr_FR.po -> fr_FR)
             preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
             if (!isset($matches[1])) {
                 continue;
@@ -411,13 +410,11 @@ class Translator
      */
     private function getGitRepoSlug()
     {
-        // Check if .git directory exists
         $gitDir = $this->pluginRoot . '/.git';
         if (!is_dir($gitDir)) {
             return null;
         }
         
-        // Try to extract from git config
         $configFile = $gitDir . '/config';
         if (file_exists($configFile)) {
             $content = file_get_contents($configFile);
@@ -506,7 +503,6 @@ class Translator
             echo "Project: {$projectSlug}\n\n";
         }
         
-        // Find all POT files to determine components
         $potFiles = $this->findPotFiles();
         
         if (empty($potFiles)) {
@@ -552,7 +548,6 @@ class Translator
                         $poFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.po';
                         file_put_contents($poFile, $poContent);
                         
-                        // Convert PO to MO
                         $moFile = $this->languagesDir . '/' . $textDomain . '-' . $language . '.mo';
                         $this->convertPoToMo($poFile, $moFile);
                         
@@ -593,10 +588,7 @@ class Translator
      * @return bool True on success
      */
     private function convertPoToMo($poFile, $moFile)
-    {
-        // Simple PO to MO conversion
-        // This is a basic implementation - for production, consider using gettext tools
-        
+    { 
         $entries = [];
         $currentEntry = null;
         $lines = file($poFile, FILE_IGNORE_NEW_LINES);
@@ -621,9 +613,7 @@ class Translator
         if ($currentEntry && !empty($currentEntry['msgid']) && !empty($currentEntry['msgstr'])) {
             $entries[] = $currentEntry;
         }
-        
-        // Write MO file (simplified binary format)
-        // For production, use proper gettext library or msgfmt command
+
         $mo = $this->buildMoFile($entries);
         return file_put_contents($moFile, $mo) !== false;
     }
@@ -650,7 +640,6 @@ class Translator
      */
     private function buildMoFile($entries)
     {
-        // MO file magic number
         $magic = 0x950412de;
         $revision = 0;
         $count = count($entries);
@@ -750,7 +739,6 @@ class Translator
                 echo "This may take several minutes depending on the number of strings.\n";
                 echo str_repeat('-', 50) . "\n\n";
                 
-                // Use passthru for real-time output
                 $returnCode = 0;
                 passthru($command . ' 2>&1', $returnCode);
                 

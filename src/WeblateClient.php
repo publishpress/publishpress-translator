@@ -144,14 +144,12 @@ class WeblateClient
     public function createComponent($projectSlug, $componentSlug, $componentName, $potFilePath, $gitRepoSlug = null)
     {
         try {
-            // Read POT file content
             $potContent = file_get_contents($potFilePath);
             if ($potContent === false) {
                 throw new Exception("Failed to read POT file: {$potFilePath}");
             }
             
             $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
-            // Use the git repo slug if provided, otherwise try to guess from componentSlug
             $repoSlug = $gitRepoSlug ?: $componentSlug;
             
             if ($repoType === 'ssh') {
@@ -202,13 +200,17 @@ class WeblateClient
     public function uploadPot($projectSlug, $componentSlug, $potFilePath)
     {
         try {
+            $fileHandle = fopen($potFilePath, 'r');
+            if ($fileHandle === false) {
+                throw new Exception("Failed to open POT file: {$potFilePath}");
+            }
             $response = $this->client->post(
                 "translations/{$projectSlug}/{$componentSlug}/en/file/",
                 [
                     'multipart' => [
                         [
                             'name' => 'file',
-                            'contents' => fopen($potFilePath, 'r'),
+                            'contents' => $fileHandle,
                             'filename' => basename($potFilePath),
                         ],
                         [
@@ -228,7 +230,7 @@ class WeblateClient
     /**
      * Map WordPress language codes to Weblate language codes
      * 
-     * @param string $wpLangCode WordPress language code (e.g., de_DE, fr_FR, ja, fi)
+     * @param string $wpLangCode WordPress language code
      * @return string Weblate language code
      */
     private function mapLanguageCode($wpLangCode)
@@ -248,30 +250,23 @@ class WeblateClient
         if (isset($specialMappings[$wpLangCode])) {
             return $specialMappings[$wpLangCode];
         }
-        
-        // For standard WordPress codes like de_DE, es_ES, fr_FR
-        // Try to extract just the language part (de, es, fr)
+
         if (strpos($wpLangCode, '_') !== false) {
             $parts = explode('_', $wpLangCode);
             $languageCode = strtolower($parts[0]);
             $countryCode = strtolower($parts[1]);
-            
-            // Some languages use country codes in Weblate (e.g., en_GB, pt_BR)
-            // Try the full code first, fallback to language code only
+
             $fullCode = "{$languageCode}_{$countryCode}";
-            
-            // Known Weblate codes that use full format
+
             $fullFormatCodes = ['en_GB', 'pt_BR', 'he_IL', 'sr_RS'];
             
             if (in_array($fullCode, $fullFormatCodes)) {
                 return $fullCode;
             }
             
-            // Otherwise return just the language code
             return $languageCode;
         }
         
-        // If it's already in a short format (ja, fi, etc.), return as-is
         return strtolower($wpLangCode);
     }
     
@@ -292,13 +287,20 @@ class WeblateClient
             
             $this->ensureTranslation($projectSlug, $componentSlug, $weblateLanguage);
             
+            if (!file_exists($poFilePath)) {
+                throw new Exception("PO file does not exist: {$poFilePath}");
+            }
+            $fileHandle = fopen($poFilePath, 'r');
+            if ($fileHandle === false) {
+                throw new Exception("Failed to open PO file: {$poFilePath}");
+            }
             $response = $this->client->post(
                 "translations/{$projectSlug}/{$componentSlug}/{$weblateLanguage}/file/",
                 [
                     'multipart' => [
                         [
                             'name' => 'file',
-                            'contents' => fopen($poFilePath, 'r'),
+                            'contents' => $fileHandle,
                         ],
                         [
                             'name' => 'method',
@@ -330,11 +332,9 @@ class WeblateClient
     private function ensureTranslation($projectSlug, $componentSlug, $language)
     {
         try {
-            // Check if translation exists
             $this->client->get("translations/{$projectSlug}/{$componentSlug}/{$language}/");
         } catch (GuzzleException $e) {
             if ($e->getCode() === 404) {
-                // Translation doesn't exist, create it
                 try {
                     $this->client->post("components/{$projectSlug}/{$componentSlug}/translations/", [
                         'json' => [
@@ -366,7 +366,6 @@ class WeblateClient
     public function downloadPo($projectSlug, $componentSlug, $language)
     {
         try {
-            // Map WordPress language code to Weblate code
             $weblateLanguage = $this->mapLanguageCode($language);
             
             $response = $this->client->get(
@@ -376,7 +375,7 @@ class WeblateClient
             return $response->getBody()->getContents();
         } catch (GuzzleException $e) {
             if ($e->getCode() === 404) {
-                return null; // Translation doesn't exist yet
+                return null;
             }
             throw new Exception("Error downloading PO file for {$language}: " . $e->getMessage());
         }

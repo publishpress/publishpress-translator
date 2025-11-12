@@ -65,7 +65,7 @@ AI-powered translation automation for PublishPress plugins using Potomatic, Open
 composer update
 ```
 
-**Once on Packagist:** We can hange Step 1 to:
+**Once on Packagist:** We can change Step 1 to:
 ```json
 {
     "require": {

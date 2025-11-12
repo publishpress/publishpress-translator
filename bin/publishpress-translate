@@ -7,10 +7,13 @@
  * @package PublishPress\Translations
  */
 
-$isComposerScript = getenv('COMPOSER_PROCESS_TIMEOUT') === false && 
-                    (getenv('COMPOSER') !== false || 
-                     defined('COMPOSER_SCRIPT_RUNNER') || 
-                     strpos($_SERVER['_'] ?? '', 'composer') !== false);
+use PublishPress\Translations\Translator;
+
+$isComposerScript = (
+    getenv('COMPOSER') !== false ||
+    getenv('COMPOSER_PROCESS_TIMEOUT') !== false ||
+    (isset($_SERVER['_']) && strpos($_SERVER['_'], 'composer') !== false)
+);
 
 if ($isComposerScript) {
     set_time_limit(3600);
@@ -50,8 +53,6 @@ if (!$autoloaderFound) {
     fwrite(STDERR, "\nPlease run 'composer install' first.\n");
     exit(1);
 }
-
-use PublishPress\Translations\Translator;
 
 $pluginRoot = getcwd();
 
@@ -144,7 +145,7 @@ try {
         exit(1);
     }
     
-} catch (Exception $e) {
+} catch (Throwable $e) {
     fwrite(STDERR, "Error: " . $e->getMessage() . "\n");
     exit(1);
 }
