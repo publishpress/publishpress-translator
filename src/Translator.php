@@ -770,7 +770,7 @@ class Translator
         }
         
         echo str_repeat('=', 50) . "\n";
-        echo "✨ Translation " . ($success ? 'complete' : 'finished with errors') . " for {$pluginName}!\n\n";
+        echo "✨ Translation " . ($success ? 'complete' : 'finished with errors') . " for {$pluginSlug}!\n\n";
         
         return $success;
     }
