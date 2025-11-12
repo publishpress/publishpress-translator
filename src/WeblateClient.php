@@ -62,7 +62,7 @@ class WeblateClient
                 'Authorization' => 'Token ' . $this->apiToken,
                 'Accept' => 'application/json',
             ],
-            'timeout' => 30,
+            'timeout' => 120,
         ]);
     }
     

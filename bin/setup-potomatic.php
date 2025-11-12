@@ -47,7 +47,7 @@ chdir($potomaticDir);
 $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
 $npmCommand = $isWindows ? 'npm.cmd' : 'npm';
 
-passthru("{$npmCommand} install --production", $returnCode);
+passthru("{$npmCommand} install --production 2>&1", $returnCode);
 
 if ($returnCode === 0) {
     echo "✓ Potomatic setup complete!\n";
