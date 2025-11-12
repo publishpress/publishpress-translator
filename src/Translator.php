@@ -385,8 +385,13 @@ class Translator
                 echo "    ✓ Uploaded {$languageCode}\n";
                 $uploadedCount++;
             } catch (Exception $e) {
-                echo "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n";
-                $failedCount++;
+                if (strpos($e->getMessage(), 'read-only') !== false && 
+                    in_array($languageCode, ['en', 'en_US', 'en_GB'])) {
+                    echo "    ⊘ {$languageCode} (source language, read-only)\n";
+                } else {
+                    echo "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n";
+                    $failedCount++;
+                }
             }
         }
         
