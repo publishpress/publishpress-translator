@@ -113,7 +113,7 @@ WEBLATE_API_TOKEN=wlu_your-weblate-token
 
 #### 1. Run Translation (Full Cycle)
 
-**From dev-workspace (PublishPress plugins with Docker):**
+**From dev-workspace:**
 ```bash
 # Enter dev-workspace
 ./run
@@ -125,7 +125,7 @@ composer translate:dry-run
 composer translate
 ```
 
-**From plugin root (standard WordPress plugins):**
+**From plugin root:**
 ```bash
 # Dry run
 composer translate:dry-run
@@ -145,7 +145,7 @@ This ensures:
 - Only new/missing strings are translated by AI
 - Weblate always has the latest translations
 
-#### 2. Review & Improve in Weblate (Optional)
+#### 2. Review & Improve in Weblate
 
 After running translate, we then can:
 1. Visit https://hosted.weblate.org/projects/YOUR-PLUGIN/
@@ -153,7 +153,7 @@ After running translate, we then can:
 3. Use Weblate's translation memory and suggestions
 4. Collaborate with community translators
 
-#### 3. Download Only (Before Building)
+#### 3. Download Only
 
 If you just want to download the latest translations without running AI translation:
 
@@ -198,7 +198,7 @@ The tool translates into these languages by default:
 
 ### Translation Cycle (`composer translate`)
 
-**Step 1: Download from Weblate** (if enabled)
+**Step 1: Download from Weblate**
 - Pulls existing translations from Weblate
 - Preserves human edits and community contributions
 - Creates project if it doesn't exist yet
@@ -209,7 +209,7 @@ The tool translates into these languages by default:
 - Merges with existing translations (preserves manual edits)
 - Creates/updates `.po` and `.mo` files for each target language
 
-**Step 3: Upload to Weblate** (if enabled)
+**Step 3: Upload to Weblate**
 - Creates project on Weblate (using plugin slug as project slug)
 - Creates component for each text domain
 - Uploads POT template and all PO translations
@@ -236,7 +236,7 @@ The tool translates into these languages by default:
 - **Component per text domain** - Each `.pot` file becomes a component
 - **Optional** - Works without Weblate if token not set
 
-## One-Time Setup (Recommended)
+## One-Time Setup
 
 Set your API keys permanently:
 
