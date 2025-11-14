@@ -229,7 +229,7 @@ class WeblateClient
      * @param string $wpLangCode WordPress language code
      * @return string Weblate language code
      */
-    private function mapLanguageCode($wpLangCode)
+    public function mapLanguageCode($wpLangCode)
     {
         // Special mappings that don't follow the standard pattern
         $specialMappings = [
