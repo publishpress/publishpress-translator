@@ -862,6 +862,91 @@ class Translator
     }
     
     /**
+     * Remove fuzzy flags from PO file
+     * Fuzzy marks translations as "needs editing" in Weblate, not "translated"
+     * 
+     * @param string $poFile
+     */
+    private function removeFuzzyFlags($poFile)
+    {
+        $content = file_get_contents($poFile);
+
+        $content = preg_replace('/^#,\s*fuzzy\s*$/m', '', $content);
+
+        $content = preg_replace('/,\s*fuzzy(?=[,\n])/m', '', $content);
+
+        $content = preg_replace('/^#,\s*$/m', '', $content);
+
+        $content = preg_replace_callback(
+            '/msgstr\s+""\s*\n((?:"[^"]*"\s*\n?)*)/m',
+            function ($matches) {
+
+                $block = trim($matches[1]);
+                if ($block === '') {
+                    return $matches[0];
+                }
+
+                $lines = preg_split('/\r?\n/', $block);
+
+                foreach ($lines as $line) {
+
+                    $line = trim($line);
+
+                    if ($line === '' || $line === '""') {
+                        continue;
+                    }
+
+                    return "msgstr {$line}\n";
+                }
+
+                return $matches[0];
+            },
+            $content
+        );
+
+        $content = preg_replace("/\n{3,}/", "\n\n", $content);
+
+        file_put_contents($poFile, $content);
+    }
+
+    private function fixPoFileHeader($poFile)
+    {
+        $content = file_get_contents($poFile);
+        
+        $content = preg_replace('/(\n")([A-Z])/', "\n\"\n\"$2", $content);
+        $lines = explode("\n", $content);
+        $result = [];
+        $inHeader = false;
+        
+        foreach ($lines as $line) {
+            if (preg_match('/^msgstr\s+""/', $line)) {
+                $inHeader = true;
+                $result[] = $line;
+                continue;
+            }
+            
+            if (preg_match('/^msgid\s+"/', $line) && !preg_match('/^msgid\s+""/', $line)) {
+                $inHeader = false;
+            }
+            
+            if ($inHeader && preg_match('/^"[^"]*"/', $line)) {
+                if (!preg_match('/\\\\n"$/', $line)) {
+                    if (preg_match('/^"(.+)"$/', $line, $matches)) {
+                        $content_part = $matches[1];
+                        if (!preg_match('/\\\\n$/', $content_part)) {
+                            $line = '"' . $content_part . '\\n"';
+                        }
+                    }
+                }
+            }
+            
+            $result[] = $line;
+        }
+        
+        file_put_contents($poFile, implode("\n", $result));
+    }
+    
+    /**
      * Execute translation
      * 
      * @return bool
@@ -936,7 +1021,8 @@ class Translator
 
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {
-                        $this->markIdenticalTranslationsAsFuzzy($poFile);
+                        $this->fixPoFileHeader($poFile);
+                        $this->removeFuzzyFlags($poFile);
                     }
 
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
