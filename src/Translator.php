@@ -363,7 +363,8 @@ class Translator
         echo "  • Checking project '{$projectSlug}'...\n";
         if (!$this->weblateClient->projectExists($projectSlug)) {
             echo "  • Creating project '{$projectSlug}'...\n";
-            $this->weblateClient->createProject($projectSlug, $pluginSlug);
+            $gitRepoUrl = $this->getGitRepoUrl();
+            $this->weblateClient->createProject($projectSlug, $projectSlug, $gitRepoUrl);
         }
         
         // Step 2: Ensure component exists, auto-create if needed

@@ -96,11 +96,17 @@ class WeblateClient
     public function createProject($projectSlug, $projectName)
     {
         try {
+            if ($gitRepoUrl && preg_match('#^https?://github\.com/(.+?)(?:\.git)?/?$#', $gitRepoUrl, $matches)) {
+                $webUrl = "https://github.com/{$matches[1]}";
+            } else {
+                $webUrl = "https://github.com/{$projectSlug}";
+            }
+            
             $response = $this->client->post('projects/', [
                 'json' => [
                     'name' => $projectName,
                     'slug' => $projectSlug,
-                    'web' => "https://github.com/publishpress/{$projectSlug}",
+                    'web' => $webUrl,
                 ]
             ]);
             
