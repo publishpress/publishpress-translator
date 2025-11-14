@@ -376,7 +376,7 @@ class Translator
                     $componentSlug,
                     $textDomain,
                     $potFile,
-                    $this->getGitRepoSlug()
+                    $this->getGitRepoUrl()
                 );
                 echo "  ✓ Component created successfully\n";
             } catch (Exception $e) {
@@ -454,6 +454,36 @@ class Translator
             $content = file_get_contents($configFile);
             if (preg_match('/url\s*=\s*.*publishpress\/(.+?)(\.git)?$/m', $content, $matches)) {
                 return $matches[1];
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get GitHub repo URL from plugin root
+     * 
+     * @return string|null
+     */
+    private function getGitRepoUrl()
+    {
+        $gitDir = $this->pluginRoot . '/.git';
+        if (!is_dir($gitDir)) {
+            return null;
+        }
+        
+        $configFile = $gitDir . '/config';
+        if (file_exists($configFile)) {
+            $content = file_get_contents($configFile);
+            if (preg_match('/url\s*=\s*(.+?)(\.git)?$/m', $content, $matches)) {
+                $url = $matches[1];
+                if (strpos($url, 'git@github.com:') === 0) {
+                    $url = str_replace('git@github.com:', 'https://github.com/', $url);
+                }
+                if (!str_ends_with($url, '.git')) {
+                    $url .= '.git';
+                }
+                return $url;
             }
         }
         
