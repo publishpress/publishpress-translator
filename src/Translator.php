@@ -556,6 +556,31 @@ class Translator
             // Download translations for each target language
             foreach ($this->targetLanguages as $language) {
                 try {
+                    $weblateLanguage = $this->weblateClient->mapLanguageCode($language);
+                    
+                    try {
+                        $stats = $this->weblateClient->getComponentStats($projectSlug, $textDomain);
+                        
+                        if (isset($stats['results']) && is_array($stats['results'])) {
+                            $langFound = false;
+                            foreach ($stats['results'] as $stat) {
+                                if ($stat['language_code'] === $weblateLanguage && $stat['translated_percent'] > 0) {
+                                    $langFound = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!$langFound) {
+                                if (!$silent) {
+                                    echo "  ⊘ {$language} (0% translated, skipping)\n";
+                                }
+                                continue;
+                            }
+                        }
+                    } catch (Exception $e) {
+                        // If we can't get stats, try downloading anyway
+                    }
+                    
                     $poContent = $this->weblateClient->downloadPo($projectSlug, $textDomain, $language);
                     
                     if ($poContent) {
@@ -603,6 +628,29 @@ class Translator
      */
     private function convertPoToMo($poFile, $moFile)
     { 
+        $content = file_get_contents($poFile);
+        
+        $pluralFormsFixes = [
+            'fil' => 'nplurals=2; plural=(n != 1);',
+            'yo'  => 'nplurals=2; plural=(n != 1);',
+            'he'  => 'nplurals=2; plural=(n != 1);',
+        ];
+        
+        foreach ($pluralFormsFixes as $lang => $correctForm) {
+            if (preg_match('/^msgstr ""\s*"Content-Language: ' . $lang . '/m', $content)) {
+                $content = preg_replace(
+                    '/("Plural-Forms: )([^"]*)(";)/m',
+                    '$1' . $correctForm . '$3',
+                    $content
+                );
+                break;
+            }
+        }
+        
+        // Temporarily write the fixed content
+        file_put_contents($poFile, $content);
+        
+        // Now parse and convert
         $entries = [];
         $currentEntry = null;
         $lines = file($poFile, FILE_IGNORE_NEW_LINES);
