@@ -712,10 +712,15 @@ class Translator
         $langCode = $langMatches[1] ?? '';
         
         // Define correct plural forms for languages that Potomatic gets wrong
-        $canonicalPlurals = $this->getCanonicalPluralForms();
+        $pluralFormsFixes = [
+            'fil' => 'nplurals=2; plural=(n != 1);',
+            'yo'  => 'nplurals=2; plural=(n != 1);',
+            'he'  => 'nplurals=2; plural=(n != 1);',
+            'he_IL' => 'nplurals=2; plural=(n != 1);',
+        ];
         
-        if (isset($canonicalPlurals[$langCode])) {
-            $correctForm = $canonicalPlurals[$langCode];
+        if (isset($pluralFormsFixes[$langCode])) {
+            $correctForm = $pluralFormsFixes[$langCode];
             
             $content = preg_replace(
                 '/("Plural-Forms:\s*)([^"]*)(";)/m',
@@ -814,77 +819,14 @@ class Translator
         
         return $mo;
     }
-
-    /**
-     * Mark identical translations as fuzzy in PO file
-     * 
-     * @param string $poFile
-     */
-    private function markIdenticalTranslationsAsFuzzy($poFile) {
-        $content = file_get_contents($poFile);
-        $lines = explode("\n", $content);
-        $result = [];
-        
-        for ($i = 0; $i < count($lines); $i++) {
-            $line = $lines[$i];
-
-            if (preg_match('/^msgid\s+"(.+)"$/', $line, $msgidMatch) && $msgidMatch[1] !== '') {
-                $msgid = $msgidMatch[1];
-
-                if ($i + 1 < count($lines) && preg_match('/^msgstr\s+"(.+)"$/', $lines[$i + 1], $msgstrMatch)) {
-                    $msgstr = $msgstrMatch[1];
-
-                    if ($msgid === $msgstr && !empty($msgid)) {
-                        $commentIndex = count($result) - 1;
-                        while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
-                            $commentIndex--;
-                        }
-
-                        if ($commentIndex >= 0) {
-                            if (!preg_match('/fuzzy/', $result[$commentIndex])) {
-                                if (preg_match('/^#,\s*(.*)$/', $result[$commentIndex], $matches)) {
-                                    $result[$commentIndex] = '#, fuzzy, ' . $matches[1];
-                                } else {
-                                    $result[$commentIndex] .= ', fuzzy';
-                                }
-                            }
-                        } else {
-                            $result[] = '#, fuzzy';
-                        }
-                    }
-                }
-            }
-            
-            $result[] = $line;
-        }
-        
-        file_put_contents($poFile, implode("\n", $result));
-    }
-    
-    /**
-     * Remove fuzzy flags from PO file
-     * Fuzzy marks translations as "needs editing" in Weblate, not "translated"
-     * 
-     * @param string $poFile
-     */
-    private function removeFuzzyFlags($poFile)
-    {
-        $content = file_get_contents($poFile);
-
-
-        $content = preg_replace('/^#,\s*fuzzy\s*$/m', '', $content);
-        $content = preg_replace('/,\s*fuzzy(?=[,\n])/m', '', $content);
-        $content = preg_replace('/^#,\s*$\n/m', '', $content);
-
-        file_put_contents($poFile, $content);
-    }
     
     /**
      * Execute translation
      * 
      * @return bool
      */
-    public function translate() {
+    public function translate()
+    {
         $pluginSlug = $this->getPluginSlug();
         
         echo "\n🌍 PublishPress Translation Tool\n";
@@ -951,12 +893,6 @@ class Translator
                 
                 if ($returnCode === 0) {
                     $this->fixPluralForms($textDomain);
-
-                    $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
-                    foreach ($poFiles as $poFile) {
-                        $this->removeFuzzyFlags($poFile);
-                    }
-
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
                 } else {
                     fwrite(STDERR, "\n❌ Error processing {$potFileName}\n\n");
@@ -991,26 +927,23 @@ class Translator
     }
 
     /**
-     * Canonical plural forms for all languages
-     * Used by both pre-fix and post-fix methods
+     * Pre-fix plural forms BEFORE Potomatic processes
+     * This ensures Potomatic merges with correct plural counts
      * 
-     * @return array
+     * @param string $textDomain
+     * @return void
      */
     private function getCanonicalPluralForms()
     {
-        return [
-            'fil' => 'nplurals=2; plural=(n != 1 && n != 2 && n != 3 && (n % 10 == 4 || n % 10 == 6 || n % 10 == 9));',
-            'he'  => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
-            'he_IL' => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
-            'yo'  => 'nplurals=1; plural=0;',
-            'fi'  => 'nplurals=2; plural=(n != 1);',
-            'ja'  => 'nplurals=1; plural=0;',
+        $canonicalPlurals = [
+            'fil'    => 'nplurals=2; plural=(n != 1 && n != 2 && n != 3 && (n % 10 == 4 || n % 10 == 6 || n % 10 == 9));',
+            'he'     => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'he_IL'  => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'yo'     => 'nplurals=1; plural=0;',
+            'fi'     => 'nplurals=2; plural=(n != 1);',
+            'ja'     => 'nplurals=1; plural=0;',
         ];
-    }
 
-    private function preFixPluralForms($textDomain)
-    {
-        $canonicalPlurals = $this->getCanonicalPluralForms();
         $poFiles = glob($this->languagesDir . '/' . $textDomain . '-*.po');
 
         foreach ($poFiles as $poFile) {
@@ -1026,11 +959,13 @@ class Translator
             }
             
             $content = file_get_contents($poFile);
+            
             $content = preg_replace(
                 '/("Plural-Forms:\s*)([^"]*)(";)/m',
                 '$1' . $correctPlural . '$3',
                 $content
             );
+            
             file_put_contents($poFile, $content);
         }
     }
