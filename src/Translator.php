@@ -327,10 +327,10 @@ class Translator
     private function fixPluralForms($textDomain)
     {
         $pluralFormsFixes = [
-            'fil' => 'nplurals=2; plural=(n != 1);',
-            'yo'  => 'nplurals=2; plural=(n != 1);',
-            'he'  => 'nplurals=2; plural=(n != 1);',
-            'he_IL' => 'nplurals=2; plural=(n != 1);',
+        'yo' => 'nplurals=1; plural=0;',
+        'fil' => 'nplurals=2; plural=(n > 1);',
+        'he' => 'nplurals=2; plural=(n != 1);',
+        'he_IL' => 'nplurals=2; plural=(n != 1);',
         ];
         
         foreach ($pluralFormsFixes as $langCode => $correctForm) {
