@@ -301,8 +301,6 @@ class Translator
         $cmd .= ' --max-cost ' . (float) $this->potomaticSettings['max_cost'];
         $cmd .= ' --verbose-level ' . (int) $this->potomaticSettings['verbose_level'];
         
-        $cmd .= ' --preserve-plural-forms';
-        
         if ($this->forceTranslate) {
             $cmd .= ' --force-translate';
         }
@@ -904,7 +902,7 @@ class Translator
             'fil' => 'nplurals=2; plural=(n != 1 && n != 2 && n != 3 && (n % 10 == 4 || n % 10 == 6 || n % 10 == 9));',
             'he'  => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
             'he_IL' => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
-            'yo'  => 'nplurals=1; plural=0;',  // ✅ Yoruba uses nplurals=1
+            'yo'  => 'nplurals=1; plural=0;',
             'fi'  => 'nplurals=2; plural=(n != 1);',
             'ja'  => 'nplurals=1; plural=0;',
         ];
