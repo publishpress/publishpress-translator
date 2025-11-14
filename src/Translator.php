@@ -320,6 +320,29 @@ class Translator
     }
 
     /**
+     * Check if PO file has actual translations
+     * 
+     * @param string $poFile
+     * @return int Number of translated strings
+     */
+    private function countTranslatedStrings($poFile)
+    {
+        $content = file_get_contents($poFile);
+        $translatedCount = 0;
+        
+        // Count non-empty msgstr entries (excluding header)
+        preg_match_all('/^msgstr\s+"(.+)"$/m', $content, $matches);
+        
+        foreach ($matches[1] as $str) {
+            if (!empty($str) && $str !== '') {
+                $translatedCount++;
+            }
+        }
+        
+        return $translatedCount;
+    }
+
+    /**
      * Upload translations to Weblate (internal method)
      * 
      * @param string $potFile
@@ -369,6 +392,7 @@ class Translator
         
         $uploadedCount = 0;
         $failedCount = 0;
+        $skippedCount = 0;
         
         foreach ($poFiles as $poFile) {
             preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
@@ -378,14 +402,27 @@ class Translator
             
             $languageCode = $matches[1];
             
+            // Skip English source language
+            if (in_array($languageCode, ['en', 'en_US', 'en_GB'])) {
+                echo "    ⊘ {$languageCode} (source language, skipping)\n";
+                $skippedCount++;
+                continue;
+            }
+            
+            $translatedCount = $this->countTranslatedStrings($poFile);
+            if ($translatedCount === 0) {
+                echo "    ⊘ {$languageCode} (0 translated strings, skipping)\n";
+                $skippedCount++;
+                continue;
+            }
+            
             try {
                 $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
-                echo "    ✓ Uploaded {$languageCode}\n";
+                echo "    ✓ Uploaded {$languageCode} ({$translatedCount} strings)\n";
                 $uploadedCount++;
             } catch (Exception $e) {
-                if (strpos($e->getMessage(), 'read-only') !== false && 
-                    in_array($languageCode, ['en', 'en_US', 'en_GB'])) {
-                    echo "    ⊘ {$languageCode} (source language, read-only)\n";
+                if (strpos($e->getMessage(), 'read-only') !== false) {
+                    echo "    ⊘ {$languageCode} (read-only)\n";
                 } else {
                     echo "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n";
                     $failedCount++;
@@ -393,8 +430,8 @@ class Translator
             }
         }
         
-        if ($failedCount > 0) {
-            echo "  ⚠️  {$uploadedCount} uploaded, {$failedCount} failed\n";
+        if ($skippedCount > 0 || $failedCount > 0) {
+            echo "  ℹ️  {$uploadedCount} uploaded, {$skippedCount} skipped (empty), {$failedCount} failed\n";
         } else {
             echo "  ✓ All translations uploaded\n";
         }
@@ -642,27 +679,29 @@ class Translator
     { 
         $content = file_get_contents($poFile);
         
+        preg_match('/-([a-z_]+)\.po$/', $poFile, $langMatches);
+        $langCode = $langMatches[1] ?? '';
+        
+        // Define correct plural forms for languages that Potomatic gets wrong
         $pluralFormsFixes = [
             'fil' => 'nplurals=2; plural=(n != 1);',
             'yo'  => 'nplurals=2; plural=(n != 1);',
             'he'  => 'nplurals=2; plural=(n != 1);',
+            'he_IL' => 'nplurals=2; plural=(n != 1);',
         ];
         
-        foreach ($pluralFormsFixes as $lang => $correctForm) {
-            if (preg_match('/^msgstr ""\s*"Content-Language: ' . $lang . '/m', $content)) {
-                $content = preg_replace(
-                    '/("Plural-Forms: )([^"]*)(";)/m',
-                    '$1' . $correctForm . '$3',
-                    $content
-                );
-                break;
-            }
+        if (isset($pluralFormsFixes[$langCode])) {
+            $correctForm = $pluralFormsFixes[$langCode];
+            
+            $content = preg_replace(
+                '/("Plural-Forms:\s*)([^"]*)(";)/m',
+                '$1' . $correctForm . '$3',
+                $content
+            );
         }
         
-        // Temporarily write the fixed content
         file_put_contents($poFile, $content);
         
-        // Now parse and convert
         $entries = [];
         $currentEntry = null;
         $lines = file($poFile, FILE_IGNORE_NEW_LINES);
