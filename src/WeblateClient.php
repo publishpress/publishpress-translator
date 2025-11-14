@@ -150,14 +150,20 @@ class WeblateClient
             }
             
             $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
-            $repoSlug = $gitRepoSlug ?: $componentSlug;
-            
-            if ($repoType === 'ssh') {
-                $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
-                $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+
+            if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
+                $repoUrl = $gitRepoSlug;
+                $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
             } else {
-                $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
-                $pushUrl = '';
+                $repoSlug = $gitRepoSlug ?: $componentSlug;
+
+                if ($repoType === 'ssh') {
+                    $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                    $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                } else {
+                    $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+                    $pushUrl = '';
+                }
             }
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
