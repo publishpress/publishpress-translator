@@ -302,13 +302,6 @@ class Translator
         $cmd .= ' --max-cost ' . (float) $this->potomaticSettings['max_cost'];
         $cmd .= ' --verbose-level ' . (int) $this->potomaticSettings['verbose_level'];
         
-        // Fix plural forms for problematic languages
-        $cmd .= ' --language-config ' . escapeshellarg(json_encode([
-            'fil' => ['nplurals' => 2, 'plural' => '(n != 1)'],
-            'yo'  => ['nplurals' => 2, 'plural' => '(n != 1)'],
-            'he'  => ['nplurals' => 2, 'plural' => '(n != 1)'],
-        ]));
-        
         if ($this->forceTranslate) {
             $cmd .= ' --force-translate';
         }
