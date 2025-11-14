@@ -281,8 +281,7 @@ class Translator
      * @param string $textDomain
      * @return string
      */
-    private function buildCommand($potFile, $textDomain)
-    {
+    private function buildCommand($potFile, $textDomain) {
         $potomatic = $this->getPotomaticPath();
         
         // On Windows, we need to run with node explicitly
@@ -303,6 +302,13 @@ class Translator
         $cmd .= ' --max-cost ' . (float) $this->potomaticSettings['max_cost'];
         $cmd .= ' --verbose-level ' . (int) $this->potomaticSettings['verbose_level'];
         
+        // Fix plural forms for problematic languages
+        $cmd .= ' --language-config ' . escapeshellarg(json_encode([
+            'fil' => ['nplurals' => 2, 'plural' => '(n != 1)'],
+            'yo'  => ['nplurals' => 2, 'plural' => '(n != 1)'],
+            'he'  => ['nplurals' => 2, 'plural' => '(n != 1)'],
+        ]));
+        
         if ($this->forceTranslate) {
             $cmd .= ' --force-translate';
         }
@@ -317,6 +323,38 @@ class Translator
         }
         
         return $cmd;
+    }
+
+    /**
+     * Fix plural forms in all generated PO files
+     * 
+     * @param string $textDomain
+     * @return void
+     */
+    private function fixPluralForms($textDomain)
+    {
+        $pluralFormsFixes = [
+            'fil' => 'nplurals=2; plural=(n != 1);',
+            'yo'  => 'nplurals=2; plural=(n != 1);',
+            'he'  => 'nplurals=2; plural=(n != 1);',
+            'he_IL' => 'nplurals=2; plural=(n != 1);',
+        ];
+        
+        foreach ($pluralFormsFixes as $langCode => $correctForm) {
+            $poFile = $this->languagesDir . '/' . $textDomain . '-' . $langCode . '.po';
+            
+            if (file_exists($poFile)) {
+                $content = file_get_contents($poFile);
+                
+                $content = preg_replace(
+                    '/("Plural-Forms:\s*)([^"]*)(";)/m',
+                    '$1' . $correctForm . '$3',
+                    $content
+                );
+                
+                file_put_contents($poFile, $content);
+            }
+        }
     }
 
     /**
@@ -856,6 +894,7 @@ class Translator
                 passthru($command . ' 2>&1', $returnCode);
                 
                 if ($returnCode === 0) {
+                    $this->fixPluralForms($textDomain);
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
                 } else {
                     fwrite(STDERR, "\n❌ Error processing {$potFileName}\n\n");
