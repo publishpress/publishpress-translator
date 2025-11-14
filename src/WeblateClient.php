@@ -93,7 +93,7 @@ class WeblateClient
      * @return array
      * @throws Exception
      */
-    public function createProject($projectSlug, $projectName)
+    public function createProject($projectSlug, $projectName, $gitRepoUrl = null)
     {
         try {
             if ($gitRepoUrl && preg_match('#^https?://github\.com/(.+?)(?:\.git)?/?$#', $gitRepoUrl, $matches)) {
@@ -101,7 +101,7 @@ class WeblateClient
             } else {
                 $webUrl = "https://github.com/{$projectSlug}";
             }
-            
+
             $response = $this->client->post('projects/', [
                 'json' => [
                     'name' => $projectName,

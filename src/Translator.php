@@ -909,27 +909,6 @@ class Translator
 
         file_put_contents($poFile, $content);
     }
-
-    private function normalizePoHeader($poFile)
-    {
-        $content = file_get_contents($poFile);
-
-        $content = str_replace(["\r\n", "\r"], "\n", $content);
-
-        if (preg_match('/msgid ""\s*msgstr ""(.*?)\n(?=msgid|$)/s', $content, $matches)) {
-            $header = $matches[1];
-
-            $header = preg_replace('/(?<!\\\\)\\n/', '\\n', $header);
-
-            $header = preg_replace('/^\s*"\s*"\s*$/m', '', $header);
-
-            $content = preg_replace('/msgid ""\s*msgstr ""(.*?)\n(?=msgid|$)/s', 
-            "msgid \"\"\nmsgstr \"\"$header\n", 
-            $content);
-        }
-
-        file_put_contents($poFile, $content);
-    }
     
     /**
      * Execute translation
@@ -1006,7 +985,6 @@ class Translator
 
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {
-                        $this->normalizePoHeader($poFile);
                         $this->removeFuzzyFlags($poFile);
                     }
 
