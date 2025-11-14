@@ -556,6 +556,10 @@ class Translator
             // Download translations for each target language
             foreach ($this->targetLanguages as $language) {
                 try {
+                    if (in_array($language, ['en', 'en_US', 'en_GB'])) {
+                        continue;
+                    }
+                    
                     $weblateLanguage = $this->weblateClient->mapLanguageCode($language);
                     
                     try {
@@ -563,9 +567,16 @@ class Translator
                         
                         if (isset($stats['results']) && is_array($stats['results'])) {
                             $langFound = false;
+                            $translatedPercent = 0;
+                            
                             foreach ($stats['results'] as $stat) {
-                                if ($stat['language_code'] === $weblateLanguage && $stat['translated_percent'] > 0) {
+                                // Handle both 'language_code' and 'code' keys
+                                $statCode = $stat['language_code'] ?? $stat['code'] ?? null;
+                                $translated = $stat['translated_percent'] ?? $stat['translated'] ?? 0;
+                                
+                                if ($statCode === $weblateLanguage && $translated > 0) {
                                     $langFound = true;
+                                    $translatedPercent = $translated;
                                     break;
                                 }
                             }
@@ -579,6 +590,7 @@ class Translator
                         }
                     } catch (Exception $e) {
                         // If we can't get stats, try downloading anyway
+                        // Don't fail silently, just continue
                     }
                     
                     $poContent = $this->weblateClient->downloadPo($projectSlug, $textDomain, $language);
