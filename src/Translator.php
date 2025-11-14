@@ -284,7 +284,6 @@ class Translator
     private function buildCommand($potFile, $textDomain) {
         $potomatic = $this->getPotomaticPath();
         
-        // On Windows, we need to run with node explicitly
         $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
         if ($isWindows) {
             $cmd = 'node ' . escapeshellarg($potomatic);
@@ -302,6 +301,8 @@ class Translator
         $cmd .= ' --max-cost ' . (float) $this->potomaticSettings['max_cost'];
         $cmd .= ' --verbose-level ' . (int) $this->potomaticSettings['verbose_level'];
         
+        $cmd .= ' --preserve-plural-forms';
+        
         if ($this->forceTranslate) {
             $cmd .= ' --force-translate';
         }
@@ -316,79 +317,6 @@ class Translator
         }
         
         return $cmd;
-    }
-
-    private function fixPluralForms($textDomain)
-    {
-        // Weblate canonical plural forms
-        $canonicalPlurals = [
-            'yo'     => 'nplurals=1; plural=0;',
-            'fil'    => 'nplurals=2; plural=(n != 1);',
-            'he'     => 'nplurals=2; plural=(n != 1);',
-            'he_IL'  => 'nplurals=2; plural=(n != 1);',
-            // Add more languages here as needed
-        ];
-
-        // Find all relevant PO files for this text domain
-        $poFiles = glob($this->languagesDir . '/' . $textDomain . '-*.po');
-
-        foreach ($poFiles as $poFile) {
-            $basename = basename($poFile);
-            // Extract language code from filename
-            if (!preg_match("/{$textDomain}-(.+)\.po$/", $basename, $matches)) {
-                continue;
-            }
-            $langCode = $matches[1];
-
-            $content = file_get_contents($poFile);
-
-            // Determine the correct plural form
-            $correctPlural = $canonicalPlurals[$langCode] ?? null;
-            if ($correctPlural) {
-                // Replace or add Plural-Forms header
-                if (preg_match('/^"Plural-Forms:/m', $content)) {
-                    $content = preg_replace(
-                        '/("Plural-Forms:\s*)([^"]*)(";)/m',
-                        '$1' . $correctPlural . '$3',
-                        $content
-                    );
-                } else {
-                    // Insert after Content-Transfer-Encoding
-                    $content = preg_replace(
-                        '/("Content-Transfer-Encoding:[^"]*"\n)/',
-                        "$1\"Plural-Forms: {$correctPlural}\\n\"\n",
-                        $content
-                    );
-                }
-            }
-
-            // Replace or add Language header
-            if (preg_match('/^"Language:/m', $content)) {
-                $content = preg_replace(
-                    '/("Language:\s*)([^"]*)(";)/m',
-                    '$1' . $langCode . '$3',
-                    $content
-                );
-            } else {
-                // Insert after Plural-Forms or Content-Transfer-Encoding
-                if (preg_match('/("Plural-Forms:[^"]*"\n)/', $content, $matches)) {
-                    $content = str_replace(
-                        $matches[1],
-                        $matches[1] . "\"Language: {$langCode}\\n\"\n",
-                        $content
-                    );
-                } else {
-                    $content = preg_replace(
-                        '/("Content-Transfer-Encoding:[^"]*"\n)/',
-                        "$1\"Language: {$langCode}\\n\"\n",
-                        $content
-                    );
-                }
-            }
-
-            // Save the updated PO file
-            file_put_contents($poFile, $content);
-        }
     }
 
     /**
@@ -755,15 +683,10 @@ class Translator
         $langCode = $langMatches[1] ?? '';
         
         // Define correct plural forms for languages that Potomatic gets wrong
-        $pluralFormsFixes = [
-            'fil' => 'nplurals=2; plural=(n != 1);',
-            'yo'  => 'nplurals=2; plural=(n != 1);',
-            'he'  => 'nplurals=2; plural=(n != 1);',
-            'he_IL' => 'nplurals=2; plural=(n != 1);',
-        ];
+        $canonicalPlurals = $this->getCanonicalPluralForms();
         
-        if (isset($pluralFormsFixes[$langCode])) {
-            $correctForm = $pluralFormsFixes[$langCode];
+        if (isset($canonicalPlurals[$langCode])) {
+            $correctForm = $canonicalPlurals[$langCode];
             
             $content = preg_replace(
                 '/("Plural-Forms:\s*)([^"]*)(";)/m',
@@ -905,6 +828,13 @@ class Translator
             return false;
         }
         
+        echo "🔧 Step 1.5: Pre-fixing plural forms for problematic languages...\n";
+        foreach ($potFiles as $potFile) {
+            $textDomain = str_replace('.pot', '', basename($potFile));
+            $this->preFixPluralForms($textDomain);
+        }
+        echo "✓ Plural forms pre-fixed\n\n";
+        
         echo "📝 Step 2: Running AI translation with Potomatic...\n";
         echo "POT files found: " . count($potFiles) . "\n\n";
         
@@ -961,4 +891,74 @@ class Translator
         
         return $success;
     }
+
+    /**
+     * Canonical plural forms for all languages
+     * Used by both pre-fix and post-fix methods
+     * 
+     * @return array
+     */
+    private function getCanonicalPluralForms()
+    {
+        return [
+            'fil' => 'nplurals=2; plural=(n != 1 && n != 2 && n != 3 && (n % 10 == 4 || n % 10 == 6 || n % 10 == 9));',
+            'he'  => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'he_IL' => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'yo'  => 'nplurals=1; plural=0;',  // ✅ Yoruba uses nplurals=1
+            'fi'  => 'nplurals=2; plural=(n != 1);',
+            'ja'  => 'nplurals=1; plural=0;',
+        ];
+    }
+
+    private function preFixPluralForms($textDomain)
+    {
+        $canonicalPlurals = $this->getCanonicalPluralForms();
+        $poFiles = glob($this->languagesDir . '/' . $textDomain . '-*.po');
+
+        foreach ($poFiles as $poFile) {
+            if (!preg_match("/{$textDomain}-(.+)\.po$/", basename($poFile), $matches)) {
+                continue;
+            }
+            
+            $langCode = $matches[1];
+            $correctPlural = $canonicalPlurals[$langCode] ?? null;
+            
+            if (!$correctPlural) {
+                continue;
+            }
+            
+            $content = file_get_contents($poFile);
+            $content = preg_replace(
+                '/("Plural-Forms:\s*)([^"]*)(";)/m',
+                '$1' . $correctPlural . '$3',
+                $content
+            );
+            file_put_contents($poFile, $content);
+        }
+    }
+
+    private function fixPluralForms($textDomain)
+    {
+        $canonicalPlurals = $this->getCanonicalPluralForms();
+
+        foreach ($canonicalPlurals as $langCode => $correctForm) {
+            $poFile = $this->languagesDir . '/' . $textDomain . '-' . $langCode . '.po';
+
+            if (!file_exists($poFile)) {
+                continue;
+            }
+
+            $content = file_get_contents($poFile);
+            $newContent = preg_replace(
+                '/^"Plural-Forms:.*?\\n"/m',
+                "\"Plural-Forms: $correctForm\\n\"",
+                $content
+            );
+
+            if ($newContent !== $content) {
+                file_put_contents($poFile, $newContent);
+            }
+        }
+    }
+
 }
