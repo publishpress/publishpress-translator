@@ -318,35 +318,76 @@ class Translator
         return $cmd;
     }
 
-    /**
-     * Fix plural forms in all generated PO files
-     * 
-     * @param string $textDomain
-     * @return void
-     */
     private function fixPluralForms($textDomain)
     {
-        $pluralFormsFixes = [
-        'yo' => 'nplurals=1; plural=0;',
-        'fil' => 'nplurals=2; plural=(n > 1);',
-        'he' => 'nplurals=2; plural=(n != 1);',
-        'he_IL' => 'nplurals=2; plural=(n != 1);',
+        // Weblate canonical plural forms
+        $canonicalPlurals = [
+            'yo'     => 'nplurals=1; plural=0;',
+            'fil'    => 'nplurals=2; plural=(n != 1);',
+            'he'     => 'nplurals=2; plural=(n != 1);',
+            'he_IL'  => 'nplurals=2; plural=(n != 1);',
+            // Add more languages here as needed
         ];
-        
-        foreach ($pluralFormsFixes as $langCode => $correctForm) {
-            $poFile = $this->languagesDir . '/' . $textDomain . '-' . $langCode . '.po';
-            
-            if (file_exists($poFile)) {
-                $content = file_get_contents($poFile);
-                
+
+        // Find all relevant PO files for this text domain
+        $poFiles = glob($this->languagesDir . '/' . $textDomain . '-*.po');
+
+        foreach ($poFiles as $poFile) {
+            $basename = basename($poFile);
+            // Extract language code from filename
+            if (!preg_match("/{$textDomain}-(.+)\.po$/", $basename, $matches)) {
+                continue;
+            }
+            $langCode = $matches[1];
+
+            $content = file_get_contents($poFile);
+
+            // Determine the correct plural form
+            $correctPlural = $canonicalPlurals[$langCode] ?? null;
+            if ($correctPlural) {
+                // Replace or add Plural-Forms header
+                if (preg_match('/^"Plural-Forms:/m', $content)) {
+                    $content = preg_replace(
+                        '/("Plural-Forms:\s*)([^"]*)(";)/m',
+                        '$1' . $correctPlural . '$3',
+                        $content
+                    );
+                } else {
+                    // Insert after Content-Transfer-Encoding
+                    $content = preg_replace(
+                        '/("Content-Transfer-Encoding:[^"]*"\n)/',
+                        "$1\"Plural-Forms: {$correctPlural}\\n\"\n",
+                        $content
+                    );
+                }
+            }
+
+            // Replace or add Language header
+            if (preg_match('/^"Language:/m', $content)) {
                 $content = preg_replace(
-                    '/("Plural-Forms:\s*)([^"]*)(";)/m',
-                    '$1' . $correctForm . '$3',
+                    '/("Language:\s*)([^"]*)(";)/m',
+                    '$1' . $langCode . '$3',
                     $content
                 );
-                
-                file_put_contents($poFile, $content);
+            } else {
+                // Insert after Plural-Forms or Content-Transfer-Encoding
+                if (preg_match('/("Plural-Forms:[^"]*"\n)/', $content, $matches)) {
+                    $content = str_replace(
+                        $matches[1],
+                        $matches[1] . "\"Language: {$langCode}\\n\"\n",
+                        $content
+                    );
+                } else {
+                    $content = preg_replace(
+                        '/("Content-Transfer-Encoding:[^"]*"\n)/',
+                        "$1\"Language: {$langCode}\\n\"\n",
+                        $content
+                    );
+                }
             }
+
+            // Save the updated PO file
+            file_put_contents($poFile, $content);
         }
     }
 
