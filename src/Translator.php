@@ -281,11 +281,9 @@ class Translator
      * @param string $textDomain
      * @return string
      */
-    private function buildCommand($potFile, $textDomain)
-    {
+    private function buildCommand($potFile, $textDomain) {
         $potomatic = $this->getPotomaticPath();
         
-        // On Windows, we need to run with node explicitly
         $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
         if ($isWindows) {
             $cmd = 'node ' . escapeshellarg($potomatic);
@@ -320,6 +318,29 @@ class Translator
     }
 
     /**
+     * Check if PO file has actual translations
+     * 
+     * @param string $poFile
+     * @return int Number of translated strings
+     */
+    private function countTranslatedStrings($poFile)
+    {
+        $content = file_get_contents($poFile);
+        $translatedCount = 0;
+        
+        // Count non-empty msgstr entries (excluding header)
+        preg_match_all('/^msgstr\s+"(.+)"$/m', $content, $matches);
+        
+        foreach ($matches[1] as $str) {
+            if (!empty($str) && $str !== '') {
+                $translatedCount++;
+            }
+        }
+        
+        return $translatedCount;
+    }
+
+    /**
      * Upload translations to Weblate (internal method)
      * 
      * @param string $potFile
@@ -342,7 +363,8 @@ class Translator
         echo "  • Checking project '{$projectSlug}'...\n";
         if (!$this->weblateClient->projectExists($projectSlug)) {
             echo "  • Creating project '{$projectSlug}'...\n";
-            $this->weblateClient->createProject($projectSlug, $pluginSlug);
+            $gitRepoUrl = $this->getGitRepoUrl();
+            $this->weblateClient->createProject($projectSlug, $projectSlug, $gitRepoUrl);
         }
         
         // Step 2: Ensure component exists, auto-create if needed
@@ -355,7 +377,7 @@ class Translator
                     $componentSlug,
                     $textDomain,
                     $potFile,
-                    $this->getGitRepoSlug()
+                    $this->getGitRepoUrl()
                 );
                 echo "  ✓ Component created successfully\n";
             } catch (Exception $e) {
@@ -369,6 +391,7 @@ class Translator
         
         $uploadedCount = 0;
         $failedCount = 0;
+        $skippedCount = 0;
         
         foreach ($poFiles as $poFile) {
             preg_match("/{$componentSlug}-(.+)\.po$/", basename($poFile), $matches);
@@ -378,14 +401,27 @@ class Translator
             
             $languageCode = $matches[1];
             
+            // Skip English source language
+            if (in_array($languageCode, ['en', 'en_US', 'en_GB'])) {
+                echo "    ⊘ {$languageCode} (source language, skipping)\n";
+                $skippedCount++;
+                continue;
+            }
+            
+            $translatedCount = $this->countTranslatedStrings($poFile);
+            if ($translatedCount === 0) {
+                echo "    ⊘ {$languageCode} (0 translated strings, skipping)\n";
+                $skippedCount++;
+                continue;
+            }
+            
             try {
                 $this->weblateClient->uploadPo($projectSlug, $componentSlug, $languageCode, $poFile);
-                echo "    ✓ Uploaded {$languageCode}\n";
+                echo "    ✓ Uploaded {$languageCode} ({$translatedCount} strings)\n";
                 $uploadedCount++;
             } catch (Exception $e) {
-                if (strpos($e->getMessage(), 'read-only') !== false && 
-                    in_array($languageCode, ['en', 'en_US', 'en_GB'])) {
-                    echo "    ⊘ {$languageCode} (source language, read-only)\n";
+                if (strpos($e->getMessage(), 'read-only') !== false) {
+                    echo "    ⊘ {$languageCode} (read-only)\n";
                 } else {
                     echo "    ⚠️  Failed to upload {$languageCode}: " . $e->getMessage() . "\n";
                     $failedCount++;
@@ -393,8 +429,8 @@ class Translator
             }
         }
         
-        if ($failedCount > 0) {
-            echo "  ⚠️  {$uploadedCount} uploaded, {$failedCount} failed\n";
+        if ($skippedCount > 0 || $failedCount > 0) {
+            echo "  ℹ️  {$uploadedCount} uploaded, {$skippedCount} skipped (empty), {$failedCount} failed\n";
         } else {
             echo "  ✓ All translations uploaded\n";
         }
@@ -419,6 +455,36 @@ class Translator
             $content = file_get_contents($configFile);
             if (preg_match('/url\s*=\s*.*publishpress\/(.+?)(\.git)?$/m', $content, $matches)) {
                 return $matches[1];
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get GitHub repo URL from plugin root
+     * 
+     * @return string|null
+     */
+    private function getGitRepoUrl()
+    {
+        $gitDir = $this->pluginRoot . '/.git';
+        if (!is_dir($gitDir)) {
+            return null;
+        }
+        
+        $configFile = $gitDir . '/config';
+        if (file_exists($configFile)) {
+            $content = file_get_contents($configFile);
+            if (preg_match('/url\s*=\s*(.+?)(\.git)?$/m', $content, $matches)) {
+                $url = $matches[1];
+                if (strpos($url, 'git@github.com:') === 0) {
+                    $url = str_replace('git@github.com:', 'https://github.com/', $url);
+                }
+                if (!str_ends_with($url, '.git')) {
+                    $url .= '.git';
+                }
+                return $url;
             }
         }
         
@@ -556,6 +622,43 @@ class Translator
             // Download translations for each target language
             foreach ($this->targetLanguages as $language) {
                 try {
+                    if (in_array($language, ['en', 'en_US', 'en_GB'])) {
+                        continue;
+                    }
+                    
+                    $weblateLanguage = $this->weblateClient->mapLanguageCode($language);
+                    
+                    try {
+                        $stats = $this->weblateClient->getComponentStats($projectSlug, $textDomain);
+                        
+                        if (isset($stats['results']) && is_array($stats['results'])) {
+                            $langFound = false;
+                            $translatedPercent = 0;
+                            
+                            foreach ($stats['results'] as $stat) {
+                                // Handle both 'language_code' and 'code' keys
+                                $statCode = $stat['language_code'] ?? $stat['code'] ?? null;
+                                $translated = $stat['translated_percent'] ?? $stat['translated'] ?? 0;
+                                
+                                if ($statCode === $weblateLanguage && $translated > 0) {
+                                    $langFound = true;
+                                    $translatedPercent = $translated;
+                                    break;
+                                }
+                            }
+                            
+                            if (!$langFound) {
+                                if (!$silent) {
+                                    echo "  ⊘ {$language} (0% translated, skipping)\n";
+                                }
+                                continue;
+                            }
+                        }
+                    } catch (Exception $e) {
+                        // If we can't get stats, try downloading anyway
+                        // Don't fail silently, just continue
+                    }
+                    
                     $poContent = $this->weblateClient->downloadPo($projectSlug, $textDomain, $language);
                     
                     if ($poContent) {
@@ -603,6 +706,26 @@ class Translator
      */
     private function convertPoToMo($poFile, $moFile)
     { 
+        $content = file_get_contents($poFile);
+        
+        preg_match('/-([a-z_]+)\.po$/', $poFile, $langMatches);
+        $langCode = $langMatches[1] ?? '';
+        
+        // Define correct plural forms for languages that Potomatic gets wrong
+        $canonicalPlurals = $this->getCanonicalPluralForms();
+        
+        if (isset($canonicalPlurals[$langCode])) {
+            $correctForm = $canonicalPlurals[$langCode];
+            
+            $content = preg_replace(
+                '/("Plural-Forms:\s*)([^"]*)(";)/m',
+                '$1' . $correctForm . '$3',
+                $content
+            );
+        }
+        
+        file_put_contents($poFile, $content);
+        
         $entries = [];
         $currentEntry = null;
         $lines = file($poFile, FILE_IGNORE_NEW_LINES);
@@ -691,14 +814,77 @@ class Translator
         
         return $mo;
     }
+
+    /**
+     * Mark identical translations as fuzzy in PO file
+     * 
+     * @param string $poFile
+     */
+    private function markIdenticalTranslationsAsFuzzy($poFile) {
+        $content = file_get_contents($poFile);
+        $lines = explode("\n", $content);
+        $result = [];
+        
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = $lines[$i];
+
+            if (preg_match('/^msgid\s+"(.+)"$/', $line, $msgidMatch) && $msgidMatch[1] !== '') {
+                $msgid = $msgidMatch[1];
+
+                if ($i + 1 < count($lines) && preg_match('/^msgstr\s+"(.+)"$/', $lines[$i + 1], $msgstrMatch)) {
+                    $msgstr = $msgstrMatch[1];
+
+                    if ($msgid === $msgstr && !empty($msgid)) {
+                        $commentIndex = count($result) - 1;
+                        while ($commentIndex >= 0 && !preg_match('/^#[,:]/', $result[$commentIndex])) {
+                            $commentIndex--;
+                        }
+
+                        if ($commentIndex >= 0) {
+                            if (!preg_match('/fuzzy/', $result[$commentIndex])) {
+                                if (preg_match('/^#,\s*(.*)$/', $result[$commentIndex], $matches)) {
+                                    $result[$commentIndex] = '#, fuzzy, ' . $matches[1];
+                                } else {
+                                    $result[$commentIndex] .= ', fuzzy';
+                                }
+                            }
+                        } else {
+                            $result[] = '#, fuzzy';
+                        }
+                    }
+                }
+            }
+            
+            $result[] = $line;
+        }
+        
+        file_put_contents($poFile, implode("\n", $result));
+    }
+    
+    /**
+     * Remove fuzzy flags from PO file
+     * Fuzzy marks translations as "needs editing" in Weblate, not "translated"
+     * 
+     * @param string $poFile
+     */
+    private function removeFuzzyFlags($poFile)
+    {
+        $content = file_get_contents($poFile);
+
+
+        $content = preg_replace('/^#,\s*fuzzy\s*$/m', '', $content);
+        $content = preg_replace('/,\s*fuzzy(?=[,\n])/m', '', $content);
+        $content = preg_replace('/^#,\s*$\n/m', '', $content);
+
+        file_put_contents($poFile, $content);
+    }
     
     /**
      * Execute translation
      * 
      * @return bool
      */
-    public function translate()
-    {
+    public function translate() {
         $pluginSlug = $this->getPluginSlug();
         
         echo "\n🌍 PublishPress Translation Tool\n";
@@ -720,7 +906,7 @@ class Translator
         if ($this->weblateEnabled && !$this->dryRun) {
             echo "📥 Step 1: Downloading existing translations from Weblate...\n";
             try {
-                $this->downloadFromWeblate(true); // Silent mode
+                $this->downloadFromWeblate(true);
                 echo "✓ Existing translations downloaded\n\n";
             } catch (Exception $e) {
                 echo "⚠️  No existing translations found on Weblate (this is normal for new projects)\n\n";
@@ -733,6 +919,13 @@ class Translator
             fwrite(STDERR, "Error: No .pot files found in {$this->languagesDir}\n");
             return false;
         }
+        
+        echo "🔧 Step 1.5: Pre-fixing plural forms for problematic languages...\n";
+        foreach ($potFiles as $potFile) {
+            $textDomain = str_replace('.pot', '', basename($potFile));
+            $this->preFixPluralForms($textDomain);
+        }
+        echo "✓ Plural forms pre-fixed\n\n";
         
         echo "📝 Step 2: Running AI translation with Potomatic...\n";
         echo "POT files found: " . count($potFiles) . "\n\n";
@@ -757,6 +950,13 @@ class Translator
                 passthru($command . ' 2>&1', $returnCode);
                 
                 if ($returnCode === 0) {
+                    $this->fixPluralForms($textDomain);
+
+                    $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
+                    foreach ($poFiles as $poFile) {
+                        $this->removeFuzzyFlags($poFile);
+                    }
+
                     echo "\n✅ Successfully processed {$potFileName}\n\n";
                 } else {
                     fwrite(STDERR, "\n❌ Error processing {$potFileName}\n\n");
@@ -789,4 +989,74 @@ class Translator
         
         return $success;
     }
+
+    /**
+     * Canonical plural forms for all languages
+     * Used by both pre-fix and post-fix methods
+     * 
+     * @return array
+     */
+    private function getCanonicalPluralForms()
+    {
+        return [
+            'fil' => 'nplurals=2; plural=(n != 1 && n != 2 && n != 3 && (n % 10 == 4 || n % 10 == 6 || n % 10 == 9));',
+            'he'  => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'he_IL' => 'nplurals=4; plural=(n == 1 ? 0 : (n == 2 ? 1 : ((n > 10 && n % 10 == 0) ? 2 : 3)));',
+            'yo'  => 'nplurals=1; plural=0;',
+            'fi'  => 'nplurals=2; plural=(n != 1);',
+            'ja'  => 'nplurals=1; plural=0;',
+        ];
+    }
+
+    private function preFixPluralForms($textDomain)
+    {
+        $canonicalPlurals = $this->getCanonicalPluralForms();
+        $poFiles = glob($this->languagesDir . '/' . $textDomain . '-*.po');
+
+        foreach ($poFiles as $poFile) {
+            if (!preg_match("/{$textDomain}-(.+)\.po$/", basename($poFile), $matches)) {
+                continue;
+            }
+            
+            $langCode = $matches[1];
+            $correctPlural = $canonicalPlurals[$langCode] ?? null;
+            
+            if (!$correctPlural) {
+                continue;
+            }
+            
+            $content = file_get_contents($poFile);
+            $content = preg_replace(
+                '/("Plural-Forms:\s*)([^"]*)(";)/m',
+                '$1' . $correctPlural . '$3',
+                $content
+            );
+            file_put_contents($poFile, $content);
+        }
+    }
+
+    private function fixPluralForms($textDomain)
+    {
+        $canonicalPlurals = $this->getCanonicalPluralForms();
+
+        foreach ($canonicalPlurals as $langCode => $correctForm) {
+            $poFile = $this->languagesDir . '/' . $textDomain . '-' . $langCode . '.po';
+
+            if (!file_exists($poFile)) {
+                continue;
+            }
+
+            $content = file_get_contents($poFile);
+            $newContent = preg_replace(
+                '/^"Plural-Forms:.*?\\n"/m',
+                "\"Plural-Forms: $correctForm\\n\"",
+                $content
+            );
+
+            if ($newContent !== $content) {
+                file_put_contents($poFile, $newContent);
+            }
+        }
+    }
+
 }

@@ -62,7 +62,7 @@ class WeblateClient
                 'Authorization' => 'Token ' . $this->apiToken,
                 'Accept' => 'application/json',
             ],
-            'timeout' => 120,
+            'timeout' => 3600,
         ]);
     }
     
@@ -93,14 +93,20 @@ class WeblateClient
      * @return array
      * @throws Exception
      */
-    public function createProject($projectSlug, $projectName)
+    public function createProject($projectSlug, $projectName, $gitRepoUrl = null)
     {
         try {
+            if ($gitRepoUrl && preg_match('#^https?://github\.com/(.+?)(?:\.git)?/?$#', $gitRepoUrl, $matches)) {
+                $webUrl = "https://github.com/{$matches[1]}";
+            } else {
+                $webUrl = "https://github.com/{$projectSlug}";
+            }
+
             $response = $this->client->post('projects/', [
                 'json' => [
                     'name' => $projectName,
                     'slug' => $projectSlug,
-                    'web' => "https://github.com/publishpress/{$projectSlug}",
+                    'web' => $webUrl,
                 ]
             ]);
             
@@ -150,14 +156,20 @@ class WeblateClient
             }
             
             $repoType = getenv('WEBLATE_REPO_TYPE') ?: 'https';
-            $repoSlug = $gitRepoSlug ?: $componentSlug;
-            
-            if ($repoType === 'ssh') {
-                $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
-                $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+
+            if ($gitRepoSlug && preg_match('#^https?://#', $gitRepoSlug)) {
+                $repoUrl = $gitRepoSlug;
+                $pushUrl = ($repoType === 'ssh') ? $gitRepoSlug : '';
             } else {
-                $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
-                $pushUrl = '';
+                $repoSlug = $gitRepoSlug ?: $componentSlug;
+
+                if ($repoType === 'ssh') {
+                    $repoUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                    $pushUrl = "git@github.com:publishpress/{$repoSlug}.git";
+                } else {
+                    $repoUrl = "https://github.com/publishpress/{$repoSlug}.git";
+                    $pushUrl = '';
+                }
             }
             
             $response = $this->client->post("projects/{$projectSlug}/components/", [
@@ -229,7 +241,7 @@ class WeblateClient
      * @param string $wpLangCode WordPress language code
      * @return string Weblate language code
      */
-    private function mapLanguageCode($wpLangCode)
+    public function mapLanguageCode($wpLangCode)
     {
         // Special mappings that don't follow the standard pattern
         $specialMappings = [
