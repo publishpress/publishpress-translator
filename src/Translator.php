@@ -878,27 +878,28 @@ class Translator
         $content = preg_replace('/^#,\s*$/m', '', $content);
 
         $content = preg_replace_callback(
-            '/msgstr\s+""\s*\n((?:"[^"]*"\s*\n?)*)/m',
+            '/msgstr\s+("")?\s*\n?((?:"[^"]*"\s*\n?)*)/m',
             function ($matches) {
-
-                $block = trim($matches[1]);
-                if ($block === '') {
-                    return $matches[0];
+                if (empty($matches[1]) || $matches[1] !== '""') {
+                    return $matches[0]; // Keep original format
                 }
 
-                $lines = preg_split('/\r?\n/', $block);
-
+                $block = trim($matches[2]);
+                
+                if ($block === '') {
+                    return $matches[0];
+                }                
+                $lines = preg_split('/\r?\n/', $block);          
                 foreach ($lines as $line) {
-
                     $line = trim($line);
-
+                    
                     if ($line === '' || $line === '""') {
                         continue;
                     }
-
+                    
                     return "msgstr {$line}\n";
                 }
-
+                
                 return $matches[0];
             },
             $content
@@ -909,41 +910,25 @@ class Translator
         file_put_contents($poFile, $content);
     }
 
-    private function fixPoFileHeader($poFile)
+    private function normalizePoHeader($poFile)
     {
         $content = file_get_contents($poFile);
-        
-        $content = preg_replace('/(\n")([A-Z])/', "\n\"\n\"$2", $content);
-        $lines = explode("\n", $content);
-        $result = [];
-        $inHeader = false;
-        
-        foreach ($lines as $line) {
-            if (preg_match('/^msgstr\s+""/', $line)) {
-                $inHeader = true;
-                $result[] = $line;
-                continue;
-            }
-            
-            if (preg_match('/^msgid\s+"/', $line) && !preg_match('/^msgid\s+""/', $line)) {
-                $inHeader = false;
-            }
-            
-            if ($inHeader && preg_match('/^"[^"]*"/', $line)) {
-                if (!preg_match('/\\\\n"$/', $line)) {
-                    if (preg_match('/^"(.+)"$/', $line, $matches)) {
-                        $content_part = $matches[1];
-                        if (!preg_match('/\\\\n$/', $content_part)) {
-                            $line = '"' . $content_part . '\\n"';
-                        }
-                    }
-                }
-            }
-            
-            $result[] = $line;
+
+        $content = str_replace(["\r\n", "\r"], "\n", $content);
+
+        if (preg_match('/msgid ""\s*msgstr ""(.*?)\n(?=msgid|$)/s', $content, $matches)) {
+            $header = $matches[1];
+
+            $header = preg_replace('/(?<!\\\\)\\n/', '\\n', $header);
+
+            $header = preg_replace('/^\s*"\s*"\s*$/m', '', $header);
+
+            $content = preg_replace('/msgid ""\s*msgstr ""(.*?)\n(?=msgid|$)/s', 
+            "msgid \"\"\nmsgstr \"\"$header\n", 
+            $content);
         }
-        
-        file_put_contents($poFile, implode("\n", $result));
+
+        file_put_contents($poFile, $content);
     }
     
     /**
@@ -1021,7 +1006,7 @@ class Translator
 
                     $poFiles = glob($this->languagesDir . "/{$textDomain}-*.po");
                     foreach ($poFiles as $poFile) {
-                        $this->fixPoFileHeader($poFile);
+                        $this->normalizePoHeader($poFile);
                         $this->removeFuzzyFlags($poFile);
                     }
 
