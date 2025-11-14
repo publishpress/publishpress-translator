@@ -871,41 +871,10 @@ class Translator
     {
         $content = file_get_contents($poFile);
 
+
         $content = preg_replace('/^#,\s*fuzzy\s*$/m', '', $content);
-
         $content = preg_replace('/,\s*fuzzy(?=[,\n])/m', '', $content);
-
-        $content = preg_replace('/^#,\s*$/m', '', $content);
-
-        $content = preg_replace_callback(
-            '/msgstr\s+("")?\s*\n?((?:"[^"]*"\s*\n?)*)/m',
-            function ($matches) {
-                if (empty($matches[1]) || $matches[1] !== '""') {
-                    return $matches[0]; // Keep original format
-                }
-
-                $block = trim($matches[2]);
-                
-                if ($block === '') {
-                    return $matches[0];
-                }                
-                $lines = preg_split('/\r?\n/', $block);          
-                foreach ($lines as $line) {
-                    $line = trim($line);
-                    
-                    if ($line === '' || $line === '""') {
-                        continue;
-                    }
-                    
-                    return "msgstr {$line}\n";
-                }
-                
-                return $matches[0];
-            },
-            $content
-        );
-
-        $content = preg_replace("/\n{3,}/", "\n\n", $content);
+        $content = preg_replace('/^#,\s*$\n/m', '', $content);
 
         file_put_contents($poFile, $content);
     }
